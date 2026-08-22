@@ -28,13 +28,13 @@ function Stepper({
 }) {
   const clamp = (v: number) => Math.min(max, Math.max(min, v));
   return (
-    <div className="flex items-center justify-between gap-3 rounded-2xl bg-neutral-800 p-3">
-      <div className="text-base font-bold text-neutral-300">{label}</div>
+    <div className="flex items-center justify-between gap-3 rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <div className="text-base font-bold text-[#1a1a1e]">{label}</div>
       <div className="flex items-center gap-2">
         <button
           type="button"
           onClick={() => onChange(clamp(value - 1))}
-          className="h-12 w-12 rounded-xl bg-neutral-700 text-2xl font-bold"
+          className="h-12 w-12 rounded-xl bg-neutral-100 text-2xl font-bold text-[#1a1a1e]"
           aria-label={`decrease ${label}`}
         >
           −
@@ -46,7 +46,7 @@ function Stepper({
         <button
           type="button"
           onClick={() => onChange(clamp(value + 1))}
-          className="h-12 w-12 rounded-xl bg-neutral-700 text-2xl font-bold"
+          className="h-12 w-12 rounded-xl bg-neutral-100 text-2xl font-bold text-[#1a1a1e]"
           aria-label={`increase ${label}`}
         >
           +
@@ -83,7 +83,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       </header>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-neutral-500">
+        <h2 className="text-sm font-bold uppercase tracking-widest text-neutral-400">
           Who's here? ({presentIds.length}/{roster.length})
         </h2>
         {roster.map((p) => {
@@ -95,8 +95,8 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
               onClick={() => toggle(p.id)}
               className={`flex items-center gap-3 rounded-2xl p-3 text-left ring-1 transition ${
                 present
-                  ? "bg-green-950/60 ring-green-700"
-                  : "bg-neutral-900 opacity-60 ring-neutral-800"
+                  ? "bg-white ring-2 ring-[#1a1a1e]"
+                  : "bg-neutral-100 opacity-60 ring-hairline"
               }`}
             >
               <Avatar player={p} className="h-14 w-14" />
@@ -106,7 +106,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
               </div>
               <span
                 className={`rounded-full px-4 py-2 text-sm font-bold uppercase ${
-                  present ? "bg-green-600 text-white" : "bg-neutral-700 text-neutral-300"
+                  present ? "bg-[#1a1a1e] text-white" : "bg-neutral-200 text-neutral-500"
                 }`}
               >
                 {present ? "Present" : "Absent"}
@@ -117,7 +117,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       </section>
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-bold uppercase tracking-widest text-neutral-500">Format</h2>
+        <h2 className="text-sm font-bold uppercase tracking-widest text-neutral-400">Format</h2>
         <Stepper
           label="Players on field"
           value={config.playersOnField}
@@ -166,12 +166,12 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       <div className="sticky bottom-0 pb-[env(safe-area-inset-bottom)] pt-3">
         {canStart ? (
           <button type="button" onClick={() => onStart(presentIds)} className={`${btnPrimary} py-6 text-2xl`}>
-            ▶ START GAME
+            START GAME
           </button>
         ) : (
           <>
             <button type="button" disabled className={`${btnPrimary} py-6 text-2xl`}>
-              ▶ START GAME
+              START GAME
             </button>
             <p className="mt-2 text-center text-sm font-bold text-amber-400">
               Need {shortOf} more player{shortOf === 1 ? "" : "s"} present for{" "}

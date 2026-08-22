@@ -34,7 +34,7 @@ interface ActiveAlarm {
 const EMPTY_EVENTS: GameEvent[] = [];
 
 const ROOT_CLASSES =
-  "min-h-dvh bg-neutral-950 px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-neutral-100";
+  "min-h-dvh bg-[#f1f0ea] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
 
 export default function App() {
   const [store, setStore] = useState<Store>(loadStore);
@@ -332,7 +332,7 @@ export default function App() {
         <>
           {!alarm && (
             <div className="mx-auto mb-3 max-w-md text-center">
-              <span className="text-xs font-bold uppercase tracking-widest text-neutral-600">
+              <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">
                 PlayerTime
               </span>
             </div>
@@ -397,8 +397,7 @@ export default function App() {
           <p className="text-neutral-400">No active game.</p>
           <button type="button" onClick={() => setScreen("pregame")} className={`${btnPrimary} w-auto px-8`}>
             Go to pre-game
-          </button>
-        </div>
+          </button>        </div>
       )}
 
       {alarm && screen === "live" && (
