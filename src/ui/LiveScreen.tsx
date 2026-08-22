@@ -47,12 +47,40 @@ function stintFrac(st: PlayerTimeState, config: GameConfig): number {
   return st.currentStintSec / Math.max(1, config.maxStintSec);
 }
 
-// Heat ring for field circles: green -> amber -> red pulsing at cap.
-function stintRing(st: PlayerTimeState, config: GameConfig): string {
-  const frac = stintFrac(st, config);
-  if (frac >= 1) return "ring-4 ring-red-500 animate-pulse";
-  if (frac >= 0.75) return "ring-4 ring-amber-400";
-  return "ring-4 ring-[#1a1a1e]";
+// Donut gauge around a kid's photo — stint progress toward the heat cap.
+// Ink arc normally; amber near cap; red pulsing at cap. Attention only.
+function KidGauge({
+  frac,
+  player,
+}: {
+  frac: number;
+  player: Player;
+}) {
+  const clamped = Math.min(1, Math.max(0, frac));
+  const R = 33;
+  const C = 2 * Math.PI * R;
+  const color =
+    clamped >= 1 ? "#dc2626" : clamped >= 0.75 ? "#f59e0b" : "#1a1a1e";
+  return (
+    <div className={`relative h-[84px] w-[84px] ${clamped >= 1 ? "animate-pulse" : ""}`}>
+      <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
+        <circle cx="42" cy="42" r={R} fill="none" stroke="#e7e4db" strokeWidth="5" />
+        {clamped > 0 && (
+          <circle
+            cx="42"
+            cy="42"
+            r={R}
+            fill="none"
+            stroke={color}
+            strokeWidth="5"
+            strokeLinecap="round"
+            strokeDasharray={`${C * clamped} ${C}`}
+          />
+        )}
+      </svg>
+      <Avatar player={player} className="absolute inset-[9px] h-[66px] w-[66px]" />
+    </div>
+  );
 }
 
 export function LiveScreen({
@@ -302,23 +330,38 @@ export function LiveScreen({
         </section>
       )}
 
-      {/* FIELD VIEW */}
+      {/* FIELD VIEW — quick reference: who's on, how cooked, who's next */}
       {view === "field" && (
-        <div className="flex flex-col items-center gap-6 pt-2">
-          <section className="w-full">
-            <SectionTitle>On field</SectionTitle>
-            <div className="mt-2 grid grid-cols-4 justify-items-center gap-2">
+        <div className="flex flex-col gap-5 pt-1">
+          <section className="rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+            <div className="mb-3 flex items-center justify-between">
+              <h2 className="text-base font-extrabold">On field</h2>
+              {clockRunning ? (
+                <span className="rounded-full bg-accenttint px-3 py-1 text-sm font-extrabold tabular-nums text-[#ea580c]">
+                  next sub {subCountdown}
+                </span>
+              ) : (
+                <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-extrabold text-amber-700">
+                  paused
+                </span>
+              )}
+            </div>
+            <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: Math.max(4, onFieldRows.length) }).map((_, i) => {
                 const row = onFieldRows[i];
                 if (!row)
                   return (
                     <div
                       key={`empty-${i}`}
-                      className="flex h-24 w-24 items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-2xl text-neutral-300"
+                      className="flex flex-col items-center gap-2 rounded-2xl bg-[#f7f6f0] py-4"
                     >
-                      +
+                      <div className="flex h-[84px] w-[84px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-2xl text-neutral-300">
+                        +
+                      </div>
+                      <span className="text-sm font-bold text-neutral-300">open</span>
                     </div>
                   );
+                const hot = stintFrac(row.st, config) >= 0.75;
                 return (
                   <button
                     type="button"
@@ -326,14 +369,16 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: row.p.id, inId: engine.suggestIn(state, config) })
                     }
-                    className="flex flex-col items-center gap-1 active:scale-[0.97]"
+                    className="flex flex-col items-center gap-1.5 rounded-2xl bg-[#f7f6f0] py-4 active:scale-[0.97]"
                   >
-                    <Avatar player={row.p} className={`h-20 w-20 sm:h-24 sm:w-24 ${stintRing(row.st, config)}`} />
-                    <span className="max-w-[5.5rem] truncate text-sm font-extrabold">
+                    <KidGauge frac={stintFrac(row.st, config)} player={row.p} />
+                    <span className="max-w-[9rem] truncate text-base font-extrabold">
                       {row.p.name.split(" ")[0]}
                     </span>
-                    <span className={`text-[11px] font-bold tabular-nums ${stintFrac(row.st, config) >= 0.75 ? "text-amber-300" : "text-neutral-500"}`}>
-                      {fmtClock(row.st.currentStintSec)}
+                    <span
+                      className={`text-xs font-bold tabular-nums ${hot ? "text-amber-600" : "text-neutral-500"}`}
+                    >
+                      on {fmtClock(row.st.currentStintSec)}
                     </span>
                   </button>
                 );
@@ -341,30 +386,37 @@ export function LiveScreen({
             </div>
           </section>
 
-          <section className="w-full">
-            <SectionTitle>Next up — tap to swap in</SectionTitle>
-            <div className="mt-2 grid grid-cols-4 justify-items-center gap-2">
-              {waitingRows.slice(0, 4).map(({ p }) => (
-                <button
-                  type="button"
-                  key={p.id}
-                  onClick={() => setSheet({ outId: engine.suggestOut(state, config), inId: p.id })}
-                  className="flex flex-col items-center gap-1 active:scale-[0.97]"
-                >
-                  <Avatar
-                    player={p}
-                    className={`h-16 w-16 ${p.id === nextInId ? "ring-4 ring-[#ea580c]" : "opacity-75 ring-2 ring-hairline"}`}
-                  />
-                  <span className="max-w-[5.5rem] truncate text-sm font-bold text-neutral-500">
-                    {p.name.split(" ")[0]}
-                  </span>
-                </button>
-              ))}
+          <section>
+            <div className="mb-2 flex items-baseline justify-between">
+              <SectionTitle>Next up</SectionTitle>
+              <span className="text-xs text-neutral-400">tap to send in</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
+              {waitingRows.slice(0, 4).map(({ p }) => {
+                const isNext = p.id === nextInId;
+                return (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() =>
+                      setSheet({ outId: engine.suggestOut(state, config), inId: p.id })
+                    }
+                    className={`flex items-center gap-2.5 rounded-full py-2.5 pl-2.5 pr-4 active:scale-[0.97] ${
+                      isNext ? "bg-accenttint ring-2 ring-[#ea580c]/50" : "bg-white ring-1 ring-hairline"
+                    }`}
+                  >
+                    <Avatar player={p} className="h-10 w-10" />
+                    <span className={`min-w-0 flex-1 truncate text-left text-base font-bold ${isNext ? "text-[#ea580c]" : "text-[#1a1a1e]"}`}>
+                      {p.name.split(" ")[0]}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </section>
 
-          <p className="text-center text-xs text-neutral-600">
-            tap a green kid to pull · tap an amber kid to send in
+          <p className="pb-2 text-center text-xs text-neutral-400">
+            tap a kid on the card to pull them off
           </p>
         </div>
       )}
