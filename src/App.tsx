@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { engine } from "./engine";
 import type { GameEvent, GameState, PlayerId } from "./types";
 import {
+  emptyStore,
   loadStore,
   saveStore,
   uid,
@@ -9,6 +10,7 @@ import {
   type PendingSwap,
   type Store,
 } from "./store";
+import { demoStore } from "./testing/demo";
 import { startAlarm, stopAlarm, unlockAudio } from "./lib/alarm";
 import { SetupScreen } from "./ui/SetupScreen";
 import { PreGameScreen } from "./ui/PreGameScreen";
@@ -123,6 +125,15 @@ export default function App() {
         available: presentIds.includes(p.id),
       }),
     );
+    // Starters: first playersOnField present kids by roster order. The first
+    // interval alarm rebalances from there.
+    const starters = store.roster.filter((p) => presentIds.includes(p.id)).slice(
+      0,
+      Math.max(0, store.config.playersOnField),
+    );
+    for (const p of starters) {
+      evts.push({ type: "SUB_IN", atSec: 0, playerId: p.id });
+    }
     evts.push({ type: "START", atSec: 0 });
     intervalFiredRef.current = 0;
     prevForcedRef.current = false;
@@ -290,6 +301,20 @@ export default function App() {
             setStore((s) => ({ ...s, roster: s.roster.filter((p) => p.id !== id) }))
           }
           onNext={() => setScreen("pregame")}
+          onLoadDemo={() => {
+            setStore(demoStore());
+            setScreen("report");
+          }}
+          onEraseAll={() => {
+            stopAlarm();
+            setAlarm(null);
+            alarmOpenRef.current = false;
+            intervalFiredRef.current = 0;
+            prevForcedRef.current = false;
+            alertedPendingRef.current = new Set();
+            setStore(emptyStore());
+            setScreen("setup");
+          }}
         />
       )}
 

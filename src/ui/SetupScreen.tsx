@@ -9,9 +9,11 @@ interface Props {
   onSave: (player: Player) => void;
   onDelete: (id: string) => void;
   onNext: () => void;
+  onLoadDemo?: () => void;
+  onEraseAll?: () => void;
 }
 
-export function SetupScreen({ roster, onSave, onDelete, onNext }: Props) {
+export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEraseAll }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [numberStr, setNumberStr] = useState("");
@@ -181,6 +183,32 @@ export function SetupScreen({ roster, onSave, onDelete, onNext }: Props) {
           </div>
         ))}
       </section>
+
+      {import.meta.env.DEV && onLoadDemo && onEraseAll && (
+        <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-neutral-800 p-3">
+          <span className="text-xs font-bold uppercase tracking-widest text-neutral-600">
+            dev tools
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Replace current data with the demo team?")) onLoadDemo();
+            }}
+            className="rounded-xl bg-neutral-800 px-4 py-2 text-sm font-bold text-neutral-300"
+          >
+            Load demo data
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (window.confirm("Erase ALL saved data? This can't be undone.")) onEraseAll();
+            }}
+            className="rounded-xl bg-neutral-800 px-4 py-2 text-sm font-bold text-red-400"
+          >
+            Erase all
+          </button>
+        </section>
+      )}
     </div>
   );
 }
