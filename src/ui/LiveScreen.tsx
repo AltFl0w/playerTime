@@ -65,7 +65,7 @@ function KidGauge({
   const color =
     clamped >= 1 ? "#dc2626" : clamped >= 0.75 ? "#f59e0b" : "#1a1a1e";
   return (
-    <div className={`relative h-[84px] w-[84px] ${clamped >= 1 ? "animate-pulse" : ""}`}>
+    <div className={`relative h-16 w-16 shrink-0 ${clamped >= 1 ? "animate-pulse" : ""}`}>
       <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
         <circle cx="42" cy="42" r={R} fill="none" stroke="#e7e4db" strokeWidth="5" />
         {clamped > 0 && (
@@ -81,7 +81,7 @@ function KidGauge({
           />
         )}
       </svg>
-      <Avatar player={player} className="absolute inset-[9px] h-[66px] w-[66px]" />
+      <Avatar player={player} className="absolute inset-[7px] h-[50px] w-[50px]" />
     </div>
   );
 }
@@ -395,9 +395,9 @@ export function LiveScreen({
                   return (
                     <div
                       key={`empty-${i}`}
-                      className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2.5"
+                      className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2"
                     >
-                      <div className="flex h-[66px] w-[66px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-2xl text-neutral-300">
+                      <div className="flex h-[50px] w-[50px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-xl text-neutral-300">
                         +
                       </div>
                       <span className="text-sm font-bold text-neutral-300">open</span>
@@ -411,7 +411,7 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: row.p.id, inId: engine.suggestIn(state, config) })
                     }
-                    className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2.5 text-left active:scale-[0.97]"
+                    className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2 text-left active:scale-[0.97]"
                   >
                     <KidGauge frac={stintFrac(row.st, config)} player={row.p} />
                     <div className="min-w-0">
