@@ -421,7 +421,10 @@ export function LiveScreen({
                       <div
                         className={`mt-0.5 text-xs font-bold tabular-nums ${hot ? "text-amber-600" : "text-neutral-500"}`}
                       >
-                        on {fmtClock(row.st.currentStintSec)}
+                        {row.p.name && row.st.onField ? `on ${fmtClock(row.st.currentStintSec)} · ` : ""}
+                        <span>
+                          {fmtClock(row.st.playedSec)} total
+                        </span>
                       </div>
                     </div>
                   </button>
@@ -436,7 +439,7 @@ export function LiveScreen({
               <span className="text-xs text-neutral-400">tap to send in</span>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
-              {waitingRows.slice(0, 4).map(({ p }) => {
+              {waitingRows.slice(0, 4).map(({ p, st }) => {
                 const isNext = p.id === nextInId;
                 return (
                   <button
@@ -445,14 +448,19 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: engine.suggestOut(state, config), inId: p.id })
                     }
-                    className={`flex items-center gap-2.5 rounded-full py-2.5 pl-2.5 pr-4 active:scale-[0.97] ${
+                    className={`flex items-center gap-2.5 rounded-full py-1.5 pl-2.5 pr-4 active:scale-[0.97] ${
                       isNext ? "bg-accenttint ring-2 ring-[#ea580c]/50" : "bg-white ring-1 ring-hairline"
                     }`}
                   >
                     <Avatar player={p} className="h-10 w-10" />
-                    <span className={`min-w-0 flex-1 truncate text-left text-base font-bold ${isNext ? "text-[#ea580c]" : "text-[#1a1a1e]"}`}>
-                      {p.name.split(" ")[0]}
-                    </span>
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#ea580c]" : "text-[#1a1a1e]"}`}>
+                        {p.name.split(" ")[0]}
+                      </div>
+                      <div className="text-[10px] font-bold uppercase tabular-nums text-neutral-400">
+                        {fmtClock(st.playedSec)} played
+                      </div>
+                    </div>
                   </button>
                 );
               })}
