@@ -316,6 +316,22 @@ export default function App() {
     showToast(`${byId.get(alarm.inId)?.name.split(" ")[0] ?? "Player"} on`);
   }
 
+  // One-tap "Swapped!": both sides settle in a single call — two sequential
+  // settleAlarm calls would each read the same stale `alarm` and clobber
+  // the other's done flag.
+  function confirmBoth() {
+    if (!alarm) return;
+    const evts: GameEvent[] = [];
+    if (alarm.outId && !alarm.outDone)
+      evts.push({ type: "SUB_OUT", atSec: elapsedSec, playerId: alarm.outId });
+    if (alarm.inId && !alarm.inDone)
+      evts.push({ type: "SUB_IN", atSec: elapsedSec, playerId: alarm.inId });
+    if (evts.length === 0) return;
+    pushEvents(evts);
+    settleAlarm({ outDone: true, inDone: true });
+    showToast("Swapped");
+  }
+
   function refuseIn() {
     if (!alarm?.inId || alarm.inDone) return;
     pushEvents([{ type: "DECLINE", atSec: elapsedSec, playerId: alarm.inId }]);
@@ -468,6 +484,7 @@ export default function App() {
           outDone={alarm.outDone}
           inDone={alarm.inDone}
           onConfirmOut={confirmOut}
+          onConfirmBoth={confirmBoth}
           onConfirmIn={confirmIn}
           onRefuseIn={refuseIn}
           onDismiss={dismissAlarm}

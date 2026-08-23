@@ -9,6 +9,7 @@ interface Props {
   outDone: boolean;
   inDone: boolean; // confirmed in OR refused
   onConfirmOut: () => void;
+  onConfirmBoth: () => void;
   onConfirmIn: () => void;
   onRefuseIn: () => void;
   onDismiss: () => void;
@@ -41,7 +42,7 @@ export function SwapAlarmModal(p: Props) {
 
       <div className="flex w-full max-w-md flex-col gap-3">
         {bothPending && (
-          <button type="button" onClick={() => { p.onConfirmOut(); p.onConfirmIn(); }} className={bigAccent}>
+          <button type="button" onClick={p.onConfirmBoth} className={bigAccent}>
             Swapped!
           </button>
         )}
