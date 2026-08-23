@@ -12,6 +12,7 @@ import {
 } from "./store";
 import { demoStore } from "./testing/demo";
 import { startAlarm, stopAlarm, unlockAudio } from "./lib/alarm";
+import { useWakeLock } from "./lib/wakeLock";
 import { SetupScreen } from "./ui/SetupScreen";
 import { PreGameScreen } from "./ui/PreGameScreen";
 import { LiveScreen } from "./ui/LiveScreen";
@@ -95,6 +96,8 @@ export default function App() {
   // Authoritative time = event-derived elapsed + wall offset since the open
   // segment began; survives refreshes via the persisted runningSinceMs.
   const clockRunning = !!game && baseState.clockRunning && !baseState.ended;
+
+  useWakeLock(screen === "live" && !!game && !baseState.ended);
   const elapsedSec =
     baseState.elapsedSec +
     (game?.runningSinceMs ? Math.max(0, Math.floor((now - game.runningSinceMs) / 1000)) : 0);
