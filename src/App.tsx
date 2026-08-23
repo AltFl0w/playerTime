@@ -34,7 +34,7 @@ interface ActiveAlarm {
 const EMPTY_EVENTS: GameEvent[] = [];
 
 const ROOT_CLASSES =
-  "min-h-dvh bg-[#f1f0ea] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
+  "min-h-dvh bg-[#f4f5f7] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
 
 export default function App() {
   const [store, setStore] = useState<Store>(loadStore);

@@ -43,7 +43,7 @@ export function Avatar({ player, className }: { player: Player; className: strin
       .toUpperCase() || "?";
   return (
     <div
-      className={`${className} flex shrink-0 select-none items-center justify-center rounded-full bg-[#eae8de] font-extrabold text-[#6b6960]`}
+      className={`${className} flex shrink-0 select-none items-center justify-center rounded-full bg-[#eceef2] font-extrabold text-[#6b6960]`}
     >
       {initials}
     </div>

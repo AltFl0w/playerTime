@@ -418,13 +418,12 @@ export function LiveScreen({
                       <div className="truncate text-lg font-extrabold leading-tight">
                         {row.p.name.split(" ")[0]}
                       </div>
-                      <div
-                        className={`mt-0.5 text-xs font-bold tabular-nums ${hot ? "text-amber-600" : "text-neutral-500"}`}
-                      >
-                        {row.p.name && row.st.onField ? `on ${fmtClock(row.st.currentStintSec)} · ` : ""}
-                        <span>
-                          {fmtClock(row.st.playedSec)} total
+                      <div className="mt-0.5 flex items-baseline gap-1 whitespace-nowrap text-xs font-bold tabular-nums">
+                        <span className={hot ? "text-amber-600" : "text-neutral-700"}>
+                          {fmtClock(row.st.currentStintSec)}
                         </span>
+                        <span className="text-neutral-300">/</span>
+                        <span className="text-neutral-400">{fmtClock(row.st.playedSec)}</span>
                       </div>
                     </div>
                   </button>
@@ -457,8 +456,8 @@ export function LiveScreen({
                       <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#ea580c]" : "text-[#1a1a1e]"}`}>
                         {p.name.split(" ")[0]}
                       </div>
-                      <div className="text-[10px] font-bold uppercase tabular-nums text-neutral-400">
-                        {fmtClock(st.playedSec)} played
+                      <div className="text-[11px] font-semibold tabular-nums text-neutral-400">
+                        {fmtClock(st.playedSec)}
                       </div>
                     </div>
                   </button>
@@ -468,7 +467,7 @@ export function LiveScreen({
           </section>
 
           <p className="pb-2 text-center text-xs text-neutral-400">
-            tap a kid on the card to pull them off
+            stint / total · tap a kid on the card to pull them off
           </p>
         </div>
       )}

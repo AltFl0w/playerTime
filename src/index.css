@@ -1,9 +1,9 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #f1f0ea;
+  --color-canvas: #f4f5f7;
   --color-card: #ffffff;
-  --color-hairline: #e7e4db;
+  --color-hairline: #e9ebef;
   --color-ink: #1a1a1e;
   --color-mutedink: #8b8a85;
   --color-accent: #ea580c;
@@ -13,7 +13,7 @@
 /* Alarm screen-flash — attention purpose only (fires with the swap alarm) */
 @keyframes ptFlash {
   0%, 100% {
-    background-color: #f1f0ea;
+    background-color: #f4f5f7;
   }
   50% {
     background-color: #ffd9b8;
