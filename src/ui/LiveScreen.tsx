@@ -395,9 +395,9 @@ export function LiveScreen({
                   return (
                     <div
                       key={`empty-${i}`}
-                      className="flex flex-col items-center gap-2 rounded-2xl bg-[#f7f6f0] py-4"
+                      className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2.5"
                     >
-                      <div className="flex h-[84px] w-[84px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-2xl text-neutral-300">
+                      <div className="flex h-[66px] w-[66px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-2xl text-neutral-300">
                         +
                       </div>
                       <span className="text-sm font-bold text-neutral-300">open</span>
@@ -411,17 +411,19 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: row.p.id, inId: engine.suggestIn(state, config) })
                     }
-                    className="flex flex-col items-center gap-1.5 rounded-2xl bg-[#f7f6f0] py-4 active:scale-[0.97]"
+                    className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2.5 text-left active:scale-[0.97]"
                   >
                     <KidGauge frac={stintFrac(row.st, config)} player={row.p} />
-                    <span className="max-w-[9rem] truncate text-base font-extrabold">
-                      {row.p.name.split(" ")[0]}
-                    </span>
-                    <span
-                      className={`text-xs font-bold tabular-nums ${hot ? "text-amber-600" : "text-neutral-500"}`}
-                    >
-                      on {fmtClock(row.st.currentStintSec)}
-                    </span>
+                    <div className="min-w-0">
+                      <div className="truncate text-lg font-extrabold leading-tight">
+                        {row.p.name.split(" ")[0]}
+                      </div>
+                      <div
+                        className={`mt-0.5 text-xs font-bold tabular-nums ${hot ? "text-amber-600" : "text-neutral-500"}`}
+                      >
+                        on {fmtClock(row.st.currentStintSec)}
+                      </div>
+                    </div>
                   </button>
                 );
               })}
