@@ -57,12 +57,11 @@ function Stepper({
 }
 
 export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackToSetup }: Props) {
-  // Absent-set instead of present-set so players added later default to present.
+  // Most kids show up, so everyone starts present and the coach taps only the
+  // no-shows. Late arrivals join mid-game via "Arrived" in the list view.
   const [absent, setAbsent] = useState<Set<string>>(() => new Set());
 
   const presentIds = roster.filter((p) => !absent.has(p.id)).map((p) => p.id);
-  const shortOf = config.playersOnField - presentIds.length;
-  const canStart = roster.length > 0 && shortOf <= 0;
 
   function toggle(id: string) {
     setAbsent((prev) => {
@@ -164,21 +163,9 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       </section>
 
       <div className="sticky bottom-0 pb-[env(safe-area-inset-bottom)] pt-3">
-        {canStart ? (
-          <button type="button" onClick={() => onStart(presentIds)} className={`${btnPrimary} py-6 text-2xl`}>
-            START GAME
-          </button>
-        ) : (
-          <>
-            <button type="button" disabled className={`${btnPrimary} py-6 text-2xl`}>
-              START GAME
-            </button>
-            <p className="mt-2 text-center text-sm font-bold text-amber-400">
-              Need {shortOf} more player{shortOf === 1 ? "" : "s"} present for{" "}
-              {config.playersOnField}v{config.playersOnField}
-            </p>
-          </>
-        )}
+        <button type="button" onClick={() => onStart(presentIds)} className={`${btnPrimary} py-6 text-2xl`}>
+          START GAME
+        </button>
       </div>
     </div>
   );
