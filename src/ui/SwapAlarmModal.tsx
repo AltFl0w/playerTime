@@ -65,7 +65,7 @@ export function SwapAlarmModal(p: Props) {
             )}
           </>
         )}
-        <button type="button" onClick={p.onDismiss} className="py-3 font-bold text-neutral-400">
+        <button type="button" onClick={p.onDismiss} className="min-h-[44px] py-3 font-bold text-neutral-400">
           Not yet — dismiss
         </button>
       </div>

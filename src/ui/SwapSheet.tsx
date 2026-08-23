@@ -46,7 +46,7 @@ export function SwapSheet(props: Props) {
         <button
           type="button"
           onClick={props.onCancel}
-          className="w-full py-1.5 pt-2 text-sm font-bold text-neutral-400"
+          className="min-h-[44px] w-full py-2 pt-2 text-sm font-bold text-neutral-400"
         >
           Cancel
         </button>

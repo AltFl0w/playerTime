@@ -3,8 +3,9 @@ import { engine } from "../engine";
 import type { GameConfig, GameState, Player, PlayerTimeState } from "../types";
 import type { PendingSwap } from "../store";
 import { fmtClock } from "../lib/format";
-import { Avatar, Badge, SectionTitle, btnGhost, btnPrimary, type BadgeTone } from "./bits";
+import { Avatar, Badge, SectionTitle, btnAccent, type BadgeTone } from "./bits";
 import { SwapSheet } from "./SwapSheet";
+import { ConfirmSheet } from "./ConfirmSheet";
 
 interface Props {
   roster: Player[];
@@ -108,9 +109,12 @@ export function LiveScreen({
   const [view, setView] = useState<"field" | "list">("field");
   // Swap sheet: pre-decided pair awaiting timing confirmation.
   const [sheet, setSheet] = useState<{ outId: string | null; inId: string | null } | null>(null);
-  // Ready flow: which recovered kid we're picking an OUT for, then scheduling.
+  // Ready flow: which recovered kid we're scheduling back in, and which OUT
+  // candidate is currently selected (defaults to the engine's top pick).
   const [pickOutFor, setPickOutFor] = useState<string | null>(null);
   const [schedOutId, setSchedOutId] = useState<string | null>(null);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
 
   const byId = new Map(roster.map((p) => [p.id, p]));
   const rows: Row[] = [];
@@ -142,10 +146,22 @@ export function LiveScreen({
     Math.max(0, (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec),
   );
 
+  // MARK_READY fires only once a swap is actually confirmed/scheduled (see
+  // scheduleReadySwap) — not here — so cancelling this flow leaves the kid in
+  // declined_wait instead of silently marking them ready.
   function startReadyFlow(id: string) {
-    onMarkReady(id);
+    const topOut = engine
+      .rankOutCandidates(state, config)
+      .find((c) => c.eligible && state.players[c.playerId]?.onField);
     setPickOutFor(id);
-    setSchedOutId(null);
+    setSchedOutId(topOut?.playerId ?? null);
+  }
+
+  function scheduleReadySwap(delayMin: number) {
+    if (!pickOutFor || !schedOutId) return;
+    onMarkReady(pickOutFor);
+    onScheduleSwap(schedOutId, pickOutFor, delayMin);
+    closeFlows();
   }
 
   function closeFlows() {
@@ -165,43 +181,21 @@ export function LiveScreen({
             {clockRunning ? `Q${quarter} · next sub ${subCountdown}` : atBreak ? `quarter ${quarter} over` : "PAUSED"}
           </div>
         </div>
-        <div className="flex flex-col items-end gap-2">
-          <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
-            <button
-              type="button"
-              onClick={() => setView("field")}
-              className={view === "field" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
-            >
-              Field
-            </button>
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              className={view === "list" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
-            >
-              List
-            </button>
-          </div>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onPauseToggle}
-              className={`rounded-[7px] px-5 py-2 text-base font-bold ${
-                clockRunning ? "bg-white text-[#1a1a1e] ring-1 ring-hairline" : "bg-[#1a1a1e] text-white"
-              }`}
-            >
-              {clockRunning ? "Pause" : "Play"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                if (window.confirm("End the game and show the report?")) onEnd();
-              }}
-              className="rounded-[7px] bg-red-50 px-5 py-2 text-base font-bold text-red-700 ring-1 ring-red-200"
-            >
-              END
-            </button>
-          </div>
+        <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
+          <button
+            type="button"
+            onClick={() => setView("field")}
+            className={view === "field" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
+          >
+            Field
+          </button>
+          <button
+            type="button"
+            onClick={() => setView("list")}
+            className={view === "list" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
+          >
+            List
+          </button>
         </div>
       </div>
 
@@ -272,7 +266,7 @@ export function LiveScreen({
                   type="button"
                   onClick={() => onCancelPending(ps.id)}
                   aria-label="Cancel scheduled swap"
-                  className="px-2 text-lg text-neutral-500"
+                  className="-mr-1 p-3 text-lg text-neutral-500"
                 >
                   ✕
                 </button>
@@ -302,72 +296,84 @@ export function LiveScreen({
         </section>
       )}
 
-      {/* Ready flow — rank OUT candidates for a kid who just came back */}
-      {pickOutFor !== null && schedOutId === null && (
-        <section className="flex flex-col gap-2 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
-          <SectionTitle>
-            {pickPlayer ? `${pickPlayer.name} is ready — who comes out?` : "Who comes out?"}
-          </SectionTitle>
-          {candidates.length === 0 && <p className="py-2 text-neutral-400">Nobody is on the field yet.</p>}
-          <div className="grid grid-cols-2 gap-2">
-            {candidates.map((c) => {
-              const st = state.players[c.playerId];
-              const p = byId.get(c.playerId);
-              if (!st || !p) return null;
-              const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
-              return c.eligible ? (
+      {/* Ready flow — leads with the engine's top OUT pick as a one-tap swap;
+          the full candidate grid + timing options sit below as the fallback
+          for when the coach wants someone else or a delayed swap. */}
+      {pickOutFor !== null && pickPlayer && (
+        <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
+          <SectionTitle>{pickPlayer.name} is ready</SectionTitle>
+
+          {schedPlayer ? (
+            <button type="button" onClick={() => scheduleReadySwap(0)} className={btnAccent}>
+              Swap now — pull {schedPlayer.name.split(" ")[0]}
+            </button>
+          ) : (
+            <p className="py-1 text-neutral-400">Nobody is on the field yet.</p>
+          )}
+
+          <div className="flex flex-col gap-2">
+            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+              or choose who comes out
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              {candidates.map((c) => {
+                const st = state.players[c.playerId];
+                const p = byId.get(c.playerId);
+                if (!st || !p) return null;
+                const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
+                const selected = c.playerId === schedOutId;
+                return c.eligible ? (
+                  <button
+                    type="button"
+                    key={c.playerId}
+                    onClick={() => setSchedOutId(c.playerId)}
+                    className={`flex items-center gap-2 rounded-[7px] px-2 py-2 text-left active:scale-[0.97] ${
+                      selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
+                    }`}
+                  >
+                    <Avatar player={p} className="h-9 w-9" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
+                      <div className="text-[10px] font-bold uppercase text-[#2563eb]">{ratioPct}</div>
+                    </div>
+                  </button>
+                ) : (
+                  <div
+                    key={c.playerId}
+                    className="flex items-center gap-2 rounded-[7px] bg-neutral-100 px-2 py-2 opacity-60"
+                  >
+                    <Avatar player={p} className="h-9 w-9 grayscale" />
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-bold text-neutral-400">{p.name.split(" ")[0]}</div>
+                      <div className="text-[10px] font-bold uppercase text-neutral-400">fresh</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {schedPlayer && (
+            <div className="flex gap-2">
+              {[1, 2, 3, 5].map((mins) => (
                 <button
                   type="button"
-                  key={c.playerId}
-                  onClick={() => setSchedOutId(c.playerId)}
-                  className="flex items-center gap-2 rounded-[7px] bg-[#f1f3f6] px-2 py-2 text-left active:scale-[0.97]"
+                  key={mins}
+                  onClick={() => scheduleReadySwap(mins)}
+                  className="min-h-[44px] flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] active:scale-[0.98]"
                 >
-                  <Avatar player={p} className="h-9 w-9" />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
-                    <div className="text-[10px] font-bold uppercase text-[#2563eb]">{ratioPct}</div>
-                  </div>
+                  +{mins} min
                 </button>
-              ) : (
-                <div
-                  key={c.playerId}
-                  className="flex items-center gap-2 rounded-[7px] bg-neutral-100 px-2 py-2 opacity-60"
-                >
-                  <Avatar player={p} className="h-9 w-9 grayscale" />
-                  <div className="min-w-0">
-                    <div className="truncate text-sm font-bold text-neutral-400">{p.name.split(" ")[0]}</div>
-                    <div className="text-[10px] font-bold uppercase text-neutral-400">fresh</div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <button type="button" onClick={closeFlows} className="py-1 text-sm font-bold text-neutral-400">
-            Cancel
-          </button>
-        </section>
-      )}
+              ))}
+            </div>
+          )}
 
-      {pickOutFor !== null && schedOutId !== null && schedPlayer && pickPlayer && (
-        <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
-          <SectionTitle>
-            Pull {schedPlayer.name} · put in {pickPlayer.name}
-          </SectionTitle>
-          {[0, 1, 2, 3, 5].map((mins) => (
-            <button
-              type="button"
-              key={mins}
-              onClick={() => {
-                onScheduleSwap(schedOutId, pickOutFor, mins);
-                closeFlows();
-              }}
-              className={btnPrimary}
-            >
-              {mins === 0 ? "Swap NOW" : `+${mins} min`}
-            </button>
-          ))}
-          <button type="button" onClick={() => setSchedOutId(null)} className={btnGhost}>
-            Back
+          <button
+            type="button"
+            onClick={closeFlows}
+            className="min-h-[44px] py-2 text-sm font-bold text-neutral-400"
+          >
+            Cancel
           </button>
         </section>
       )}
@@ -439,7 +445,7 @@ export function LiveScreen({
               <span className="text-xs text-neutral-400">tap to send in</span>
             </div>
             <div className="grid grid-cols-2 gap-2.5">
-              {waitingRows.slice(0, 4).map(({ p, st }) => {
+              {waitingRows.map(({ p, st }) => {
                 const isNext = p.id === nextInId;
                 return (
                   <button
@@ -532,11 +538,8 @@ export function LiveScreen({
                   {st.availability === "available" && !st.onField && (
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(`Take ${p.name} out of the game (injury/leaving)?`))
-                          onSetAvailability(p.id, false);
-                      }}
-                      className="rounded-lg px-3 py-2 text-sm font-bold text-neutral-500"
+                      onClick={() => setConfirmLeaveId(p.id)}
+                      className="min-h-[44px] rounded-lg px-3 py-2 text-sm font-bold text-neutral-500"
                     >
                       Leave game
                     </button>
@@ -557,6 +560,31 @@ export function LiveScreen({
         </section>
       )}
 
+      {/* Once-per-game action — deliberately smaller and out of the thumb zone */}
+      <button
+        type="button"
+        onClick={() => setConfirmEnd(true)}
+        className="min-h-[44px] w-full rounded-[7px] bg-red-50 px-4 py-3 text-sm font-bold text-red-700 ring-1 ring-red-200"
+      >
+        End game
+      </button>
+
+      {/* Thumb-zone control — the one button the coach reaches for most,
+          pinned within reach while running around */}
+      <div className="sticky bottom-0 bg-[#f3f5f8] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+        <button
+          type="button"
+          onClick={onPauseToggle}
+          className={`w-full rounded-[7px] px-4 py-4 text-lg font-extrabold transition active:scale-[0.98] ${
+            clockRunning
+              ? "bg-white text-[#1a1a1e] shadow-[0_2px_8px_rgba(26,26,30,0.18)] ring-1 ring-hairline"
+              : "bg-[#2563eb] text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)]"
+          }`}
+        >
+          {clockRunning ? "Pause" : "Play"}
+        </button>
+      </div>
+
       {/* Tap-a-kid swap confirmation */}
       {sheet && (
         <SwapSheet
@@ -572,6 +600,32 @@ export function LiveScreen({
             closeFlows();
           }}
           onCancel={closeFlows}
+        />
+      )}
+
+      {confirmEnd && (
+        <ConfirmSheet
+          title="End the game and show the report?"
+          confirmLabel="End game"
+          danger
+          onConfirm={() => {
+            setConfirmEnd(false);
+            onEnd();
+          }}
+          onCancel={() => setConfirmEnd(false)}
+        />
+      )}
+
+      {confirmLeaveId && (
+        <ConfirmSheet
+          title={`Take ${byId.get(confirmLeaveId)?.name ?? "this player"} out of the game (injury/leaving)?`}
+          confirmLabel="Leave game"
+          danger
+          onConfirm={() => {
+            onSetAvailability(confirmLeaveId, false);
+            setConfirmLeaveId(null);
+          }}
+          onCancel={() => setConfirmLeaveId(null)}
         />
       )}
     </div>
