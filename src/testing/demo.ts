@@ -25,7 +25,7 @@ export const DEMO_ROSTER: Player[] = [
 // - Everything else auto-rotates via the engine to a full 40-min game
 export function buildDemoGame(config: GameConfig = DEFAULT_CONFIG) {
   const roster = DEMO_ROSTER;
-  const [ava, benji, carlos, dana, , finn, gia] = DEMO_IDS;
+  const [ava, benji, carlos, dana, ellie, finn, gia] = DEMO_IDS;
 
   const events: GameEvent[] = [
     ...roster.map((p) => ev.setAvail(p.id, 0, true)),
@@ -34,13 +34,14 @@ export function buildDemoGame(config: GameConfig = DEFAULT_CONFIG) {
     ev.subIn(carlos, 0),
     ev.subIn(dana, 0),
     ev.start(0),
-    // window 1
+    // window 1 — ellie is off-field (dana is already on)
     ev.subOut(ava, 300),
-    ev.subIn(dana, 300),
+    ev.subIn(ellie, 300),
     // Gia shows up mid-window 2
     ev.setAvail(gia, 480, true),
+    // window 2 — gia is off-field (carlos is already on)
     ev.subOut(benji, 600),
-    ev.subIn(carlos, 600),
+    ev.subIn(gia, 600),
     // Finn's first turn comes up and he's having none of it
     ev.decline(finn, 620),
     // Parent reports Finn is ready; he goes in at the next natural window

@@ -13,7 +13,17 @@ interface Props {
 // the engine; the coach only picks timing.
 export function SwapSheet(props: Props) {
   const { outPlayer, inPlayer } = props;
-  const ready = !!outPlayer && !!inPlayer;
+  // A missing side is allowed to swap alone (pull off with no replacement, or
+  // send in with nobody coming off) — only block when both sides are empty.
+  const canAct = !!outPlayer || !!inPlayer;
+  const bothPresent = !!outPlayer && !!inPlayer;
+  const swapLabel = bothPresent
+    ? "Swap now"
+    : outPlayer
+      ? "Pull off — play short"
+      : inPlayer
+        ? "Send in"
+        : "Swap now";
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1a1a1e]/40 p-4 pb-6">
       <div className="w-full max-w-md rounded-[7px] bg-white p-4 shadow-2xl">
@@ -25,10 +35,10 @@ export function SwapSheet(props: Props) {
         <button
           type="button"
           onClick={props.onSwapNow}
-          disabled={!ready}
+          disabled={!canAct}
           className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] transition active:scale-[0.98] disabled:opacity-40"
         >
-          Swap now
+          {swapLabel}
         </button>
         <div className="mt-2 flex gap-2">
           {[1, 2, 3].map((m) => (
@@ -36,7 +46,7 @@ export function SwapSheet(props: Props) {
               key={m}
               type="button"
               onClick={() => props.onSchedule(m)}
-              disabled={!ready}
+              disabled={!bothPresent}
               className="flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
             >
               +{m} min

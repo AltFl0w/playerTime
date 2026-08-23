@@ -62,12 +62,18 @@ export default function App() {
   }
 
   // Suppression state for alarms. Interval counter initializes from the loaded
-  // clock so a mid-game refresh doesn't blast stale alarms.
+  // clock so a mid-game refresh doesn't blast stale alarms. Must include the
+  // wall-clock offset since runningSinceMs — event-derived elapsed alone
+  // under-counts a reload mid-segment and fires a stale SUB TIME alarm.
   const intervalFiredRef = useRef<number>(
     Math.floor(
       (store.game?.events.length ?? 0) > 0
-        ? engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
-            .elapsedSec / Math.max(1, store.config.subIntervalSec)
+        ? (engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
+            .elapsedSec +
+            (store.game?.runningSinceMs
+              ? Math.max(0, Math.floor((Date.now() - store.game.runningSinceMs) / 1000))
+              : 0)) /
+            Math.max(1, store.config.subIntervalSec)
         : 0,
     ),
   );
@@ -83,6 +89,12 @@ export default function App() {
     const unlock = () => unlockAudio();
     document.addEventListener("pointerdown", unlock, { once: true });
     return () => document.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    };
   }, []);
 
   const game = store.game;
@@ -150,9 +162,22 @@ export default function App() {
 
   useEffect(() => {
     if (screen !== "live" || !clockRunning) return;
-    const id = setInterval(() => setNow(Date.now()), 250);
+    // Poll at 250ms for resume responsiveness, but only commit a state update
+    // when the displayed second actually changes — elapsedSec ticks once a
+    // second, so the other three polls a second would otherwise re-render
+    // the whole live screen for nothing.
+    const id = setInterval(() => {
+      setNow((prev) => {
+        const t = Date.now();
+        const since = game?.runningSinceMs;
+        if (!since) return t;
+        const prevSec = Math.max(0, Math.floor((prev - since) / 1000));
+        const nextSec = Math.max(0, Math.floor((t - since) / 1000));
+        return prevSec === nextSec ? prev : t;
+      });
+    }, 250);
     return () => clearInterval(id);
-  }, [screen, clockRunning]);
+  }, [screen, clockRunning, game?.runningSinceMs]);
 
   function patchGame(fn: (g: GameRecord) => GameRecord) {
     setStore((s) => (s.game ? { ...s, game: fn(s.game) } : s));
@@ -451,6 +476,22 @@ export default function App() {
                 pendingSwaps: g.pendingSwaps.filter((ps) => ps.id !== id),
               }))
             }
+            onFirePending={(id) => {
+              // Re-open the alarm for a dead "NOW" row — dismissing the
+              // original alarm left it due but unreachable otherwise.
+              if (alarmOpenRef.current) return;
+              const ps = game.pendingSwaps.find((p) => p.id === id);
+              if (!ps) return;
+              alertedPendingRef.current.add(ps.id);
+              openAlarm({
+                kind: "pending",
+                pendingId: ps.id,
+                outId: ps.outPlayerId,
+                inId: ps.inPlayerId,
+                outDone: false,
+                inDone: false,
+              });
+            }}
           />
         </>
       )}

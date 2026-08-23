@@ -25,6 +25,7 @@ interface Props {
   onSetAvailability: (id: string, available: boolean) => void;
   onScheduleSwap: (outId: string, inId: string, delayMin: number) => void;
   onCancelPending: (id: string) => void;
+  onFirePending: (id: string) => void;
 }
 
 type Row = { p: Player; st: PlayerTimeState };
@@ -105,6 +106,7 @@ export function LiveScreen({
   onSetAvailability,
   onScheduleSwap,
   onCancelPending,
+  onFirePending,
 }: Props) {
   const [view, setView] = useState<"field" | "list">("field");
   // Swap sheet: pre-decided pair awaiting timing confirmation.
@@ -240,31 +242,45 @@ export function LiveScreen({
             const out = byId.get(ps.outPlayerId);
             const inn = byId.get(ps.inPlayerId);
             const ghost = (p: Player | undefined): Player => p ?? { id: "?", name: "?" };
+            const due = remain <= 0;
             return (
               <div
                 key={ps.id}
-                className={`flex items-center gap-2 rounded-[7px] px-2.5 py-2 ring-1 ${
-                  remain <= 0
-                    ? "animate-pulse bg-[#e8f0fe] ring-2 ring-[#2563eb]/40"
+                role={due ? "button" : undefined}
+                tabIndex={due ? 0 : undefined}
+                onClick={due ? () => onFirePending(ps.id) : undefined}
+                onKeyDown={
+                  due
+                    ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") onFirePending(ps.id);
+                      }
+                    : undefined
+                }
+                className={`flex w-full items-center gap-2 rounded-[7px] px-2.5 py-2 text-left ring-1 ${
+                  due
+                    ? "animate-pulse bg-[#e8f0fe] ring-2 ring-[#2563eb]/40 active:scale-[0.98]"
                     : "bg-white ring-hairline"
                 }`}
               >
                 <Avatar player={ghost(out)} className="h-8 w-8" />
-                <span className="text-sm text-neutral-400">⇄</span>
+                <span className="text-sm text-neutral-500">⇄</span>
                 <Avatar player={ghost(inn)} className="h-8 w-8" />
                 <div className="min-w-0 flex-1 truncate text-base font-bold">
                   {out?.name ?? "?"} ⇄ {inn?.name ?? "?"}
                 </div>
                 <span
                   className={`rounded-[7px] px-3 py-1 text-sm font-extrabold tabular-nums ${
-                    remain <= 0 ? "bg-[#2563eb] text-white" : "bg-neutral-100 text-[#2563eb]"
+                    due ? "bg-[#2563eb] text-white" : "bg-neutral-100 text-[#2563eb]"
                   }`}
                 >
-                  {remain <= 0 ? "NOW" : fmtClock(remain)}
+                  {due ? "NOW" : fmtClock(remain)}
                 </span>
                 <button
                   type="button"
-                  onClick={() => onCancelPending(ps.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onCancelPending(ps.id);
+                  }}
                   aria-label="Cancel scheduled swap"
                   className="-mr-1 p-3 text-lg text-neutral-500"
                 >
@@ -429,7 +445,7 @@ export function LiveScreen({
                       >
                         {fmtClock(row.st.currentStintSec)}
                       </div>
-                      <div className="text-[11px] font-semibold leading-snug tabular-nums text-neutral-400">
+                      <div className="text-[11px] font-semibold leading-snug tabular-nums text-neutral-500">
                         {fmtClock(row.st.playedSec)}
                       </div>
                     </div>
@@ -463,7 +479,7 @@ export function LiveScreen({
                       <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
                         {p.name.split(" ")[0]}
                       </div>
-                      <div className="text-[11px] font-semibold tabular-nums text-neutral-400">
+                      <div className="text-[11px] font-semibold tabular-nums text-neutral-500">
                         {fmtClock(st.playedSec)}
                       </div>
                     </div>
@@ -473,7 +489,7 @@ export function LiveScreen({
             </div>
           </section>
 
-          <p className="pb-2 text-center text-xs text-neutral-400">
+          <p className="pb-2 text-center text-xs text-neutral-500">
             top: stint · bottom: total · tap a kid to pull them off
           </p>
         </div>
@@ -501,7 +517,7 @@ export function LiveScreen({
                         <span className="ml-1.5 text-sm font-normal text-neutral-500">#{p.number}</span>
                       )}
                     </div>
-                    <div className="mt-0.5 text-sm tabular-nums text-neutral-400">
+                    <div className="mt-0.5 text-sm tabular-nums text-neutral-500">
                       {fmtClock(st.playedSec)} / {fmtClock(st.targetSec)} min
                       {showStint && <> · stint {fmtClock(st.currentStintSec)}</>}
                     </div>
