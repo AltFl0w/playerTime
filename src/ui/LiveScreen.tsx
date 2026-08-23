@@ -389,7 +389,7 @@ export function LiveScreen({
               )}
             </div>
             <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: Math.max(4, onFieldRows.length) }).map((_, i) => {
+              {Array.from({ length: Math.max(config.playersOnField, onFieldRows.length) }).map((_, i) => {
                 const row = onFieldRows[i];
                 if (!row)
                   return (

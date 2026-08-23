@@ -109,22 +109,29 @@ export default function App() {
     1,
     Math.round(store.config.gameLengthSec / Math.max(1, store.config.quarterCount)),
   );
-  const quarter = Math.min(store.config.quarterCount, Math.floor(elapsedSec / quarterLenSec) + 1);
+  const quarter = Math.max(
+    1,
+    Math.min(store.config.quarterCount, Math.ceil(elapsedSec / quarterLenSec)),
+  );
   // A break is any pause that lands exactly on a boundary (auto or manual).
   const atBreak =
     !!game && !baseState.ended && !clockRunning && elapsedSec > 0 && elapsedSec % quarterLenSec === 0;
   const isFinalBreak = atBreak && quarter >= store.config.quarterCount;
 
-  // Auto-pause exactly once per boundary second while running.
+  // Auto-pause exactly once per boundary, detected by crossing rather than
+  // landing exactly on it — a sleeping screen can skip the exact second.
+  // Backdated to the boundary: the app is the timekeeper, so overshoot from
+  // the missed render is discarded, not credited to the quarter.
   const autoPausedAtRef = useRef<number | null>(null);
   useEffect(() => {
     if (!clockRunning || !game || baseState.ended) return;
-    if (elapsedSec > 0 && elapsedSec % quarterLenSec === 0 && autoPausedAtRef.current !== elapsedSec) {
-      autoPausedAtRef.current = elapsedSec;
+    const boundary = Math.floor(elapsedSec / quarterLenSec) * quarterLenSec;
+    if (boundary > 0 && elapsedSec >= boundary && autoPausedAtRef.current !== boundary) {
+      autoPausedAtRef.current = boundary;
       stopAlarm();
       setAlarm(null);
       alarmOpenRef.current = false;
-      pushEvents([{ type: "PAUSE", atSec: elapsedSec }]);
+      pushEvents([{ type: "PAUSE", atSec: boundary }]);
       patchGame((g) => ({ ...g, runningSinceMs: null }));
     }
   });
@@ -220,10 +227,10 @@ export default function App() {
   useEffect(() => {
     const wasForced = prevForcedRef.current;
     const forcedNow = !!state.forcedSwap;
-    prevForcedRef.current = forcedNow;
 
     if (screen !== "live" || !game || !clockRunning || state.ended) return;
     if (alarmOpenRef.current) return;
+    prevForcedRef.current = forcedNow;
 
     const due = game.pendingSwaps.find(
       (ps) => ps.dueElapsedSec <= elapsedSec && !alertedPendingRef.current.has(ps.id),
@@ -269,18 +276,24 @@ export default function App() {
   }
 
   function settleAlarm(patch: Partial<ActiveAlarm>) {
-    setAlarm((a) => {
-      if (!a) return null;
-      const next = { ...a, ...patch };
-      const outResolved = !next.outId || next.outDone;
-      const inResolved = !next.inId || next.inDone;
-      if (outResolved && inResolved) {
-        alarmOpenRef.current = false;
-        stopAlarm();
-        return null;
+    if (!alarm) return;
+    const next = { ...alarm, ...patch };
+    const outResolved = !next.outId || next.outDone;
+    const inResolved = !next.inId || next.inDone;
+    const fullyResolved = outResolved && inResolved;
+    if (fullyResolved) {
+      alarmOpenRef.current = false;
+      stopAlarm();
+      // A resolved scheduled swap is done — drop it so the tile stops pulsing "NOW".
+      if (alarm.kind === "pending" && alarm.pendingId) {
+        const pendingId = alarm.pendingId;
+        patchGame((g) => ({
+          ...g,
+          pendingSwaps: g.pendingSwaps.filter((ps) => ps.id !== pendingId),
+        }));
       }
-      return next;
-    });
+    }
+    setAlarm(fullyResolved ? null : next);
   }
 
   function dismissAlarm() {
