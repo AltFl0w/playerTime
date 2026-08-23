@@ -161,43 +161,43 @@ export function LiveScreen({
         <div className="min-w-0">
           <div className="text-xs font-bold uppercase tracking-widest text-neutral-400">clock</div>
           <div className="text-6xl font-black leading-none tabular-nums">{fmtClock(elapsedSec)}</div>
-          <div className={`mt-1 text-sm font-bold tabular-nums ${clockRunning ? "text-[#ea580c]" : "text-amber-600"}`}>
+          <div className={`mt-1 text-sm font-bold tabular-nums ${clockRunning ? "text-[#2563eb]" : "text-amber-600"}`}>
             {clockRunning ? `Q${quarter} · next sub ${subCountdown}` : atBreak ? `quarter ${quarter} over` : "PAUSED"}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          <div className="flex overflow-hidden rounded-xl bg-white ring-1 ring-hairline text-sm font-bold">
+          <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
             <button
               type="button"
               onClick={() => setView("field")}
               className={view === "field" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
             >
-              ⚽
+              Field
             </button>
             <button
               type="button"
               onClick={() => setView("list")}
               className={view === "list" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
             >
-              ☰
+              List
             </button>
           </div>
           <div className="flex gap-2">
             <button
               type="button"
               onClick={onPauseToggle}
-              className={`rounded-xl px-5 py-2 text-base font-bold ${
+              className={`rounded-[7px] px-5 py-2 text-base font-bold ${
                 clockRunning ? "bg-white text-[#1a1a1e] ring-1 ring-hairline" : "bg-[#1a1a1e] text-white"
               }`}
             >
-              {clockRunning ? "⏸" : "▶"}
+              {clockRunning ? "Pause" : "Play"}
             </button>
             <button
               type="button"
               onClick={() => {
                 if (window.confirm("End the game and show the report?")) onEnd();
               }}
-              className="rounded-xl bg-red-50 px-5 py-2 text-base font-bold text-red-700 ring-1 ring-red-200"
+              className="rounded-[7px] bg-red-50 px-5 py-2 text-base font-bold text-red-700 ring-1 ring-red-200"
             >
               END
             </button>
@@ -207,7 +207,7 @@ export function LiveScreen({
 
       {/* Quarter / water break */}
       {atBreak && (
-        <section className="rounded-3xl bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+        <section className="rounded-[7px] bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
           <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
             {isFinalBreak ? "full time" : `end of quarter ${quarter}`}
           </div>
@@ -221,7 +221,7 @@ export function LiveScreen({
             <button
               type="button"
               onClick={onEnd}
-              className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] active:scale-[0.98]"
+              className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] active:scale-[0.98]"
             >
               See report
             </button>
@@ -229,7 +229,7 @@ export function LiveScreen({
             <button
               type="button"
               onClick={onPauseToggle}
-              className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] active:scale-[0.98]"
+              className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] active:scale-[0.98]"
             >
               Start Q{quarter + 1}
             </button>
@@ -249,9 +249,9 @@ export function LiveScreen({
             return (
               <div
                 key={ps.id}
-                className={`flex items-center gap-2 rounded-xl px-2.5 py-2 ring-1 ${
+                className={`flex items-center gap-2 rounded-[7px] px-2.5 py-2 ring-1 ${
                   remain <= 0
-                    ? "animate-pulse bg-[#ffedd5] ring-2 ring-[#ea580c]/40"
+                    ? "animate-pulse bg-[#e8f0fe] ring-2 ring-[#2563eb]/40"
                     : "bg-white ring-hairline"
                 }`}
               >
@@ -262,8 +262,8 @@ export function LiveScreen({
                   {out?.name ?? "?"} ⇄ {inn?.name ?? "?"}
                 </div>
                 <span
-                  className={`rounded-full px-3 py-1 text-sm font-extrabold tabular-nums ${
-                    remain <= 0 ? "bg-[#ea580c] text-white" : "bg-neutral-100 text-[#ea580c]"
+                  className={`rounded-[7px] px-3 py-1 text-sm font-extrabold tabular-nums ${
+                    remain <= 0 ? "bg-[#2563eb] text-white" : "bg-neutral-100 text-[#2563eb]"
                   }`}
                 >
                   {remain <= 0 ? "NOW" : fmtClock(remain)}
@@ -292,11 +292,11 @@ export function LiveScreen({
               key={p.id}
               onClick={() => startReadyFlow(p.id)}
               disabled={pickOutFor !== null}
-              className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-red-200 disabled:opacity-40"
+              className="flex items-center gap-2 rounded-[7px] bg-white px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-red-200 disabled:opacity-40"
             >
               <Avatar player={p} className="h-9 w-9" />
               <div className="min-w-0 flex-1 truncate text-base font-bold">{p.name.split(" ")[0]}</div>
-              <span className="rounded-full bg-[#ea580c] px-3.5 py-1.5 text-xs font-extrabold uppercase text-white">Ready</span>
+              <span className="rounded-[7px] bg-[#2563eb] px-3.5 py-1.5 text-xs font-extrabold uppercase text-white">Ready</span>
             </button>
           ))}
         </section>
@@ -304,7 +304,7 @@ export function LiveScreen({
 
       {/* Ready flow — rank OUT candidates for a kid who just came back */}
       {pickOutFor !== null && schedOutId === null && (
-        <section className="flex flex-col gap-2 rounded-3xl bg-white p-4 ring-2 ring-[#ea580c]/30">
+        <section className="flex flex-col gap-2 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
           <SectionTitle>
             {pickPlayer ? `${pickPlayer.name} is ready — who comes out?` : "Who comes out?"}
           </SectionTitle>
@@ -320,18 +320,18 @@ export function LiveScreen({
                   type="button"
                   key={c.playerId}
                   onClick={() => setSchedOutId(c.playerId)}
-                  className="flex items-center gap-2 rounded-xl bg-[#f7f6f0] px-2 py-2 text-left active:scale-[0.97]"
+                  className="flex items-center gap-2 rounded-[7px] bg-[#f1f3f6] px-2 py-2 text-left active:scale-[0.97]"
                 >
                   <Avatar player={p} className="h-9 w-9" />
                   <div className="min-w-0">
                     <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
-                    <div className="text-[10px] font-bold uppercase text-[#ea580c]">{ratioPct}</div>
+                    <div className="text-[10px] font-bold uppercase text-[#2563eb]">{ratioPct}</div>
                   </div>
                 </button>
               ) : (
                 <div
                   key={c.playerId}
-                  className="flex items-center gap-2 rounded-xl bg-neutral-100 px-2 py-2 opacity-60"
+                  className="flex items-center gap-2 rounded-[7px] bg-neutral-100 px-2 py-2 opacity-60"
                 >
                   <Avatar player={p} className="h-9 w-9 grayscale" />
                   <div className="min-w-0">
@@ -349,7 +349,7 @@ export function LiveScreen({
       )}
 
       {pickOutFor !== null && schedOutId !== null && schedPlayer && pickPlayer && (
-        <section className="flex flex-col gap-3 rounded-3xl bg-white p-4 ring-2 ring-[#ea580c]/30">
+        <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
           <SectionTitle>
             Pull {schedPlayer.name} · put in {pickPlayer.name}
           </SectionTitle>
@@ -375,15 +375,15 @@ export function LiveScreen({
       {/* FIELD VIEW — quick reference: who's on, how cooked, who's next */}
       {view === "field" && (
         <div className="flex flex-col gap-5 pt-1">
-          <section className="rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+          <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
             <div className="mb-3 flex items-center justify-between">
               <h2 className="text-base font-extrabold">On field</h2>
               {clockRunning ? (
-                <span className="rounded-full bg-accenttint px-3 py-1 text-sm font-extrabold tabular-nums text-[#ea580c]">
+                <span className="rounded-[7px] bg-accenttint px-3 py-1 text-sm font-extrabold tabular-nums text-[#2563eb]">
                   next sub {subCountdown}
                 </span>
               ) : (
-                <span className="rounded-full bg-amber-50 px-3 py-1 text-sm font-extrabold text-amber-700">
+                <span className="rounded-[7px] bg-amber-50 px-3 py-1 text-sm font-extrabold text-amber-700">
                   paused
                 </span>
               )}
@@ -395,7 +395,7 @@ export function LiveScreen({
                   return (
                     <div
                       key={`empty-${i}`}
-                      className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2"
+                      className="flex items-center gap-3 rounded-[7px] bg-[#f1f3f6] px-3 py-2"
                     >
                       <div className="flex h-[50px] w-[50px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-xl text-neutral-300">
                         +
@@ -411,19 +411,20 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: row.p.id, inId: engine.suggestIn(state, config) })
                     }
-                    className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] px-3 py-2 text-left active:scale-[0.97]"
+                    className="flex items-center gap-3 rounded-[7px] bg-[#f1f3f6] px-3 py-2 text-left active:scale-[0.97]"
                   >
                     <KidGauge frac={stintFrac(row.st, config)} player={row.p} />
-                    <div className="min-w-0">
-                      <div className="truncate text-lg font-extrabold leading-tight">
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-base font-extrabold leading-tight">
                         {row.p.name.split(" ")[0]}
                       </div>
-                      <div className="mt-0.5 flex items-baseline gap-1 whitespace-nowrap text-xs font-bold tabular-nums">
-                        <span className={hot ? "text-amber-600" : "text-neutral-700"}>
-                          {fmtClock(row.st.currentStintSec)}
-                        </span>
-                        <span className="text-neutral-300">/</span>
-                        <span className="text-neutral-400">{fmtClock(row.st.playedSec)}</span>
+                      <div
+                        className={`text-[13px] font-bold leading-snug tabular-nums ${hot ? "text-amber-600" : "text-neutral-700"}`}
+                      >
+                        {fmtClock(row.st.currentStintSec)}
+                      </div>
+                      <div className="text-[11px] font-semibold leading-snug tabular-nums text-neutral-400">
+                        {fmtClock(row.st.playedSec)}
                       </div>
                     </div>
                   </button>
@@ -447,13 +448,13 @@ export function LiveScreen({
                     onClick={() =>
                       setSheet({ outId: engine.suggestOut(state, config), inId: p.id })
                     }
-                    className={`flex items-center gap-2.5 rounded-full py-1.5 pl-2.5 pr-4 active:scale-[0.97] ${
-                      isNext ? "bg-accenttint ring-2 ring-[#ea580c]/50" : "bg-white ring-1 ring-hairline"
+                    className={`flex items-center gap-2.5 rounded-[7px] py-1.5 pl-2.5 pr-4 active:scale-[0.97] ${
+                      isNext ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-white ring-1 ring-hairline"
                     }`}
                   >
                     <Avatar player={p} className="h-10 w-10" />
                     <div className="min-w-0 flex-1 text-left">
-                      <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#ea580c]" : "text-[#1a1a1e]"}`}>
+                      <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
                         {p.name.split(" ")[0]}
                       </div>
                       <div className="text-[11px] font-semibold tabular-nums text-neutral-400">
@@ -467,7 +468,7 @@ export function LiveScreen({
           </section>
 
           <p className="pb-2 text-center text-xs text-neutral-400">
-            stint / total · tap a kid on the card to pull them off
+            top: stint · bottom: total · tap a kid to pull them off
           </p>
         </div>
       )}
@@ -483,7 +484,7 @@ export function LiveScreen({
             return (
               <div
                 key={p.id}
-                className={`rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)] ${st.availability === "inactive" ? "opacity-50" : ""}`}
+                className={`rounded-[7px] bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)] ${st.availability === "inactive" ? "opacity-50" : ""}`}
               >
                 <div className="flex items-center gap-3">
                   <Avatar player={p} className="h-14 w-14" />
@@ -516,7 +517,7 @@ export function LiveScreen({
                       onClick={() => onSubIn(p.id)}
                       className="rounded-lg bg-green-50 px-3 py-2 text-sm font-bold text-green-700 ring-1 ring-green-200"
                     >
-                      ▶ Sub in now
+                      Sub in now
                     </button>
                   )}
                   {st.onField && (

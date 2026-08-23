@@ -24,7 +24,7 @@ export function SwapAlarmModal(p: Props) {
     <div className="fixed inset-0 z-50 flex flex-col items-center justify-center gap-6 bg-white px-6">
       <div className="text-center">
         <div
-          className={`text-4xl font-black tracking-wide ${forced ? "animate-pulse text-red-600" : "text-[#ea580c]"}`}
+          className={`text-4xl font-black tracking-wide ${forced ? "animate-pulse text-red-600" : "text-[#2563eb]"}`}
         >
           {p.title}
         </div>
@@ -73,10 +73,10 @@ export function SwapAlarmModal(p: Props) {
 }
 
 const bigInk =
-  "w-full rounded-2xl bg-[#1a1a1e] px-4 py-6 text-2xl font-extrabold text-white shadow-[0_2px_8px_rgba(26,26,30,0.18)] active:scale-[0.98] transition";
-const bigAccent = `${bigInk} !bg-[#ea580c] shadow-[0_2px_12px_rgba(234,88,12,0.4)]`;
+  "w-full rounded-[7px] bg-[#1a1a1e] px-4 py-6 text-2xl font-extrabold text-white shadow-[0_2px_8px_rgba(26,26,30,0.18)] active:scale-[0.98] transition";
+const bigAccent = `${bigInk} !bg-[#2563eb] shadow-[0_2px_12px_rgba(37,99,235,0.4)]`;
 const bigDanger =
-  "w-full rounded-2xl bg-red-50 px-4 py-5 text-xl font-bold text-red-700 ring-1 ring-red-200 active:scale-[0.98] transition";
+  "w-full rounded-[7px] bg-red-50 px-4 py-5 text-xl font-bold text-red-700 ring-1 ring-red-200 active:scale-[0.98] transition";
 
 function Side({
   player,

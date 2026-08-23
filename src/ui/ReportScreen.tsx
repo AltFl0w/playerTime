@@ -36,14 +36,14 @@ export function ReportScreen({
   return (
     <div className="flex flex-col gap-5">
       <header className="text-center">
-        <div className="text-sm font-bold uppercase tracking-widest text-[#ea580c]">final</div>
+        <div className="text-sm font-bold uppercase tracking-widest text-[#2563eb]">final</div>
         <h1 className="mt-1 text-3xl font-black">
           {config.playersOnField}v{config.playersOnField} · {fmtClock(elapsedSec)}
         </h1>
         {dateLine && <p className="mt-1 text-neutral-400">{dateLine}</p>}
       </header>
 
-      <section className="flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <SectionTitle>Playing time</SectionTitle>
         {rows.length === 0 && <p className="text-neutral-400">No players recorded.</p>}
         {rows.map(({ p, st }) => {
@@ -54,7 +54,7 @@ export function ReportScreen({
           return (
             <div
               key={p.id}
-              className="flex items-center gap-4 rounded-2xl bg-[#f7f6f0] p-4"
+              className="flex items-center gap-4 rounded-[7px] bg-[#f1f3f6] p-4"
             >
               <Avatar player={p} className="h-16 w-16" />
               <div className="min-w-0 flex-1">
@@ -87,7 +87,7 @@ export function ReportScreen({
       </section>
 
       {rows.some((r) => r.st.declines > 0) && (
-        <section className="rounded-2xl bg-accenttint p-4 text-center ring-1 ring-accent/20">
+        <section className="rounded-[7px] bg-accenttint p-4 text-center ring-1 ring-accent/20">
           {rows
             .filter((r) => r.st.declines > 0)
             .map(({ p, st }) => (

@@ -16,7 +16,7 @@ const badgeTones: Record<BadgeTone, string> = {
 export function Badge({ tone, children }: { tone: BadgeTone; children: ReactNode }) {
   return (
     <span
-      className={`inline-block rounded-full px-3 py-1 text-xs font-bold whitespace-nowrap ${badgeTones[tone]}`}
+      className={`inline-block rounded-[7px] px-3 py-1 text-xs font-bold whitespace-nowrap ${badgeTones[tone]}`}
     >
       {children}
     </span>
@@ -51,7 +51,7 @@ export function Avatar({ player, className }: { player: Player; className: strin
 }
 
 const btnBase =
-  "w-full rounded-2xl px-4 py-4 text-lg font-bold transition active:scale-[0.98] disabled:opacity-40";
+  "w-full rounded-[7px] px-4 py-4 text-lg font-bold transition active:scale-[0.98] disabled:opacity-40";
 
 // Primary CTA: solid ink, the one element allowed a visible shadow.
 export const btnPrimary = `${btnBase} bg-[#1a1a1e] text-white shadow-[0_2px_8px_rgba(26,26,30,0.18)]`;
@@ -60,7 +60,7 @@ export const btnGhost = `${btnBase} bg-white text-[#1a1a1e] ring-1 ring-hairline
 
 export const btnDanger = `${btnBase} bg-red-50 text-red-700 ring-1 ring-red-200`;
 
-export const btnAccent = `${btnBase} bg-[#ea580c] text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)]`;
+export const btnAccent = `${btnBase} bg-[#2563eb] text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)]`;
 
 // Small uppercase labels — tracked for scanning, not styled into wallpaper.
 export function SectionTitle({ children }: { children: ReactNode }) {

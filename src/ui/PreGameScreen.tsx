@@ -96,7 +96,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
                 type="button"
                 key={p.id}
                 onClick={() => toggle(p.id)}
-                className={`flex items-center gap-2 rounded-2xl p-1.5 text-left transition active:scale-[0.97] ${
+                className={`flex items-center gap-2 rounded-[7px] p-1.5 text-left transition active:scale-[0.97] ${
                   out ? "bg-neutral-100 opacity-55" : "bg-white shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-hairline"
                 }`}
               >
@@ -115,7 +115,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
         </div>
       </section>
 
-      <section className="rounded-2xl bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <section className="rounded-[7px] bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <Stepper
           label="On field"
           value={config.playersOnField}
@@ -155,7 +155,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
         </p>
       </section>
 
-      <section className="rounded-2xl bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <section className="rounded-[7px] bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <h2 className="pt-1.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
           Heat rules
         </h2>
@@ -192,4 +192,4 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
 }
 
 const btnStart =
-  "w-full rounded-2xl bg-[#1a1a1e] px-4 py-3.5 text-lg font-extrabold text-white shadow-[0_2px_8px_rgba(26,26,30,0.18)] active:scale-[0.98] transition";
+  "w-full rounded-[7px] bg-[#1a1a1e] px-4 py-3.5 text-lg font-extrabold text-white shadow-[0_2px_8px_rgba(26,26,30,0.18)] active:scale-[0.98] transition";

@@ -16,7 +16,7 @@ export function SwapSheet(props: Props) {
   const ready = !!outPlayer && !!inPlayer;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1a1a1e]/40 p-4 pb-6">
-      <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl">
+      <div className="w-full max-w-md rounded-[7px] bg-white p-4 shadow-2xl">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <Side player={outPlayer} label="OFF" ring="ring-red-500" />
           <div className="text-2xl text-neutral-300">⇄</div>
@@ -26,7 +26,7 @@ export function SwapSheet(props: Props) {
           type="button"
           onClick={props.onSwapNow}
           disabled={!ready}
-          className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] transition active:scale-[0.98] disabled:opacity-40"
+          className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] transition active:scale-[0.98] disabled:opacity-40"
         >
           Swap now
         </button>
@@ -37,7 +37,7 @@ export function SwapSheet(props: Props) {
               type="button"
               onClick={() => props.onSchedule(m)}
               disabled={!ready}
-              className="flex-1 rounded-xl bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
+              className="flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
             >
               +{m} min
             </button>

@@ -82,7 +82,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
         </button>
       </header>
 
-      <section className="flex flex-col gap-3 rounded-3xl bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <SectionTitle>{editingId ? "Edit player" : "Add player"}</SectionTitle>
         <div className="flex items-center gap-4">
           {photo ? (
@@ -93,7 +93,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
             </div>
           )}
           <div className="flex flex-col gap-2">
-            <label className="cursor-pointer rounded-xl bg-neutral-100 px-4 py-3 text-base font-bold text-[#1a1a1e]">
+            <label className="cursor-pointer rounded-[7px] bg-neutral-100 px-4 py-3 text-base font-bold text-[#1a1a1e]">
               {photo ? "Change photo" : "Add photo"}
               <input
                 type="file"
@@ -106,7 +106,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
               <button
                 type="button"
                 onClick={() => setPhoto(undefined)}
-                className="rounded-xl px-2 py-1 text-left text-sm font-bold text-red-600"
+                className="rounded-[7px] px-2 py-1 text-left text-sm font-bold text-red-600"
               >
                 Remove photo
               </button>
@@ -117,7 +117,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="Name"
-          className="w-full rounded-xl bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
+          className="w-full rounded-[7px] bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
         />
         <div className="flex gap-3">
           <input
@@ -125,13 +125,13 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
             onChange={(e) => setNumberStr(e.target.value)}
             inputMode="numeric"
             placeholder="# (optional)"
-            className="w-32 rounded-xl bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
+            className="w-32 rounded-[7px] bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
           />
           <input
             value={note}
             onChange={(e) => setNote(e.target.value)}
             placeholder='Note e.g. "blonde hair, glasses"'
-            className="min-w-0 flex-1 rounded-xl bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
+            className="min-w-0 flex-1 rounded-[7px] bg-[#f5f4ee] px-4 py-3 text-lg text-[#1a1a1e] outline-none ring-orange-500 placeholder:text-neutral-400 focus:ring-2"
           />
         </div>
         <div className="flex gap-3">
@@ -149,12 +149,12 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
       <section className="flex flex-col gap-2">
         <SectionTitle>{roster.length} players</SectionTitle>
         {roster.length === 0 && (
-          <p className="rounded-xl bg-white p-4 text-neutral-500 ring-1 ring-hairline">
+          <p className="rounded-[7px] bg-white p-4 text-neutral-500 ring-1 ring-hairline">
             Add your squad above — name is enough, the rest is optional.
           </p>
         )}
         {roster.map((p) => (
-          <div key={p.id} className="flex items-center gap-3 rounded-2xl bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+          <div key={p.id} className="flex items-center gap-3 rounded-[7px] bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
             <Avatar player={p} className="h-14 w-14" />
             <div className="min-w-0 flex-1">
               <div className="truncate text-lg font-bold">
@@ -168,7 +168,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
             <button
               type="button"
               onClick={() => startEdit(p)}
-              className="rounded-xl bg-neutral-100 px-4 py-3 font-bold text-[#1a1a1e]"
+              className="rounded-[7px] bg-neutral-100 px-4 py-3 font-bold text-[#1a1a1e]"
             >
               Edit
             </button>
@@ -176,7 +176,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
               type="button"
               onClick={() => remove(p.id)}
               aria-label={`Delete ${p.name}`}
-              className="rounded-xl bg-neutral-100 px-4 py-3 font-bold text-red-600"
+              className="rounded-[7px] bg-neutral-100 px-4 py-3 font-bold text-red-600"
             >
               ✕
             </button>
@@ -185,7 +185,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
       </section>
 
       {import.meta.env.DEV && onLoadDemo && onEraseAll && (
-        <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-neutral-300 p-3">
+        <section className="flex flex-wrap items-center gap-3 rounded-[7px] border border-dashed border-neutral-300 p-3">
           <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">
             dev tools
           </span>
@@ -194,7 +194,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
             onClick={() => {
               if (window.confirm("Replace current data with the demo team?")) onLoadDemo();
             }}
-            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-neutral-600 ring-1 ring-hairline"
+            className="rounded-[7px] bg-white px-4 py-2 text-sm font-bold text-neutral-600 ring-1 ring-hairline"
           >
             Load demo data
           </button>
@@ -203,7 +203,7 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
             onClick={() => {
               if (window.confirm("Erase ALL saved data? This can't be undone.")) onEraseAll();
             }}
-            className="rounded-xl bg-white px-4 py-2 text-sm font-bold text-red-600 ring-1 ring-red-200"
+            className="rounded-[7px] bg-white px-4 py-2 text-sm font-bold text-red-600 ring-1 ring-red-200"
           >
             Erase all
           </button>

@@ -17,6 +17,7 @@ import { PreGameScreen } from "./ui/PreGameScreen";
 import { LiveScreen } from "./ui/LiveScreen";
 import { ReportScreen } from "./ui/ReportScreen";
 import { SwapAlarmModal } from "./ui/SwapAlarmModal";
+import { Toast } from "./ui/Toast";
 import { btnPrimary } from "./ui/bits";
 
 type Screen = "setup" | "pregame" | "live" | "report";
@@ -34,7 +35,7 @@ interface ActiveAlarm {
 const EMPTY_EVENTS: GameEvent[] = [];
 
 const ROOT_CLASSES =
-  "min-h-dvh bg-[#f4f5f7] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
+  "min-h-dvh bg-[#f3f5f8] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
 
 export default function App() {
   const [store, setStore] = useState<Store>(loadStore);
@@ -49,6 +50,15 @@ export default function App() {
   );
   const [now, setNow] = useState(() => Date.now());
   const [alarm, setAlarm] = useState<ActiveAlarm | null>(null);
+  const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
+  const toastTimerRef = useRef<number | null>(null);
+
+  // Non-blocking swap confirmation — the coach's next tap must never wait.
+  function showToast(text: string) {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    setToast({ id: Date.now(), text });
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2200);
+  }
 
   // Suppression state for alarms. Interval counter initializes from the loaded
   // clock so a mid-game refresh doesn't blast stale alarms.
@@ -280,18 +290,21 @@ export default function App() {
     if (!alarm?.outId || alarm.outDone) return;
     pushEvents([{ type: "SUB_OUT", atSec: elapsedSec, playerId: alarm.outId }]);
     settleAlarm({ outDone: true });
+    showToast(`${byId.get(alarm.outId)?.name.split(" ")[0] ?? "Player"} off`);
   }
 
   function confirmIn() {
     if (!alarm?.inId || alarm.inDone) return;
     pushEvents([{ type: "SUB_IN", atSec: elapsedSec, playerId: alarm.inId }]);
     settleAlarm({ inDone: true });
+    showToast(`${byId.get(alarm.inId)?.name.split(" ")[0] ?? "Player"} on`);
   }
 
   function refuseIn() {
     if (!alarm?.inId || alarm.inDone) return;
     pushEvents([{ type: "DECLINE", atSec: elapsedSec, playerId: alarm.inId }]);
     settleAlarm({ inDone: true });
+    showToast(`${byId.get(alarm.inId)?.name.split(" ")[0] ?? "Player"} skipped`);
   }
 
   const byId = useMemo(() => new Map(store.roster.map((p) => [p.id, p])), [store.roster]);
@@ -444,6 +457,8 @@ export default function App() {
           onDismiss={dismissAlarm}
         />
       )}
+
+      <Toast toast={toast} />
     </div>
   );
 }
