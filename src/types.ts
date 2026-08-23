@@ -16,6 +16,7 @@ export interface Player {
 export interface GameConfig {
   playersOnField: number;
   gameLengthSec: number;
+  quarterCount: number;
   subIntervalSec: number;
   maxStintSec: number;
   shieldSec: number;
@@ -24,6 +25,7 @@ export interface GameConfig {
 export const DEFAULT_CONFIG: GameConfig = {
   playersOnField: 4,
   gameLengthSec: 40 * 60,
+  quarterCount: 4,
   subIntervalSec: 5 * 60,
   maxStintSec: 10 * 60,
   shieldSec: 3 * 60,

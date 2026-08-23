@@ -12,6 +12,9 @@ interface Props {
   state: GameState;
   elapsedSec: number;
   clockRunning: boolean;
+  quarter: number;
+  atBreak: boolean;
+  isFinalBreak: boolean;
   pendingSwaps: PendingSwap[];
   onPauseToggle: () => void;
   onEnd: () => void;
@@ -89,6 +92,9 @@ export function LiveScreen({
   state,
   elapsedSec,
   clockRunning,
+  quarter,
+  atBreak,
+  isFinalBreak,
   pendingSwaps,
   onPauseToggle,
   onEnd,
@@ -156,7 +162,7 @@ export function LiveScreen({
           <div className="text-xs font-bold uppercase tracking-widest text-neutral-400">clock</div>
           <div className="text-6xl font-black leading-none tabular-nums">{fmtClock(elapsedSec)}</div>
           <div className={`mt-1 text-sm font-bold tabular-nums ${clockRunning ? "text-[#ea580c]" : "text-amber-600"}`}>
-            {clockRunning ? `next sub ${subCountdown}` : "PAUSED"}
+            {clockRunning ? `Q${quarter} · next sub ${subCountdown}` : atBreak ? `quarter ${quarter} over` : "PAUSED"}
           </div>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -199,6 +205,38 @@ export function LiveScreen({
         </div>
       </div>
 
+      {/* Quarter / water break */}
+      {atBreak && (
+        <section className="rounded-3xl bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+          <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+            {isFinalBreak ? "full time" : `end of quarter ${quarter}`}
+          </div>
+          <div className="mt-0.5 text-2xl font-black">
+            {isFinalBreak ? "Great game, coach" : "Water break"}
+          </div>
+          <div className="mt-0.5 text-sm text-neutral-500">
+            clock + stint timers are frozen
+          </div>
+          {isFinalBreak ? (
+            <button
+              type="button"
+              onClick={onEnd}
+              className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] active:scale-[0.98]"
+            >
+              See report
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={onPauseToggle}
+              className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] active:scale-[0.98]"
+            >
+              Start Q{quarter + 1}
+            </button>
+          )}
+        </section>
+      )}
+
       {/* Pending swaps with countdown */}
       {pendingSwaps.length > 0 && (
         <section className="flex flex-col gap-2">
@@ -211,16 +249,16 @@ export function LiveScreen({
             return (
               <div
                 key={ps.id}
-                className={`flex items-center gap-3 rounded-2xl p-3 ring-1 ${
+                className={`flex items-center gap-2 rounded-xl px-2.5 py-2 ring-1 ${
                   remain <= 0
                     ? "animate-pulse bg-[#ffedd5] ring-2 ring-[#ea580c]/40"
                     : "bg-white ring-hairline"
                 }`}
               >
-                <Avatar player={ghost(out)} className="h-10 w-10" />
-                <span className="text-lg text-neutral-500">⇄</span>
-                <Avatar player={ghost(inn)} className="h-10 w-10" />
-                <div className="min-w-0 flex-1 truncate text-lg font-bold">
+                <Avatar player={ghost(out)} className="h-8 w-8" />
+                <span className="text-sm text-neutral-400">⇄</span>
+                <Avatar player={ghost(inn)} className="h-8 w-8" />
+                <div className="min-w-0 flex-1 truncate text-base font-bold">
                   {out?.name ?? "?"} ⇄ {inn?.name ?? "?"}
                 </div>
                 <span
@@ -254,13 +292,11 @@ export function LiveScreen({
               key={p.id}
               onClick={() => startReadyFlow(p.id)}
               disabled={pickOutFor !== null}
-              className="flex items-center gap-3 rounded-2xl bg-white p-3 text-left shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-red-200 disabled:opacity-40"
+              className="flex items-center gap-2 rounded-xl bg-white px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-red-200 disabled:opacity-40"
             >
-              <Avatar player={p} className="h-12 w-12" />
-              <div className="min-w-0 flex-1 truncate text-lg font-bold">{p.name}</div>
-              <span className="rounded-full bg-[#ea580c] px-5 py-2 text-sm font-extrabold uppercase text-white">
-                Ready
-              </span>
+              <Avatar player={p} className="h-9 w-9" />
+              <div className="min-w-0 flex-1 truncate text-base font-bold">{p.name.split(" ")[0]}</div>
+              <span className="rounded-full bg-[#ea580c] px-3.5 py-1.5 text-xs font-extrabold uppercase text-white">Ready</span>
             </button>
           ))}
         </section>
@@ -273,34 +309,40 @@ export function LiveScreen({
             {pickPlayer ? `${pickPlayer.name} is ready — who comes out?` : "Who comes out?"}
           </SectionTitle>
           {candidates.length === 0 && <p className="py-2 text-neutral-400">Nobody is on the field yet.</p>}
-          {candidates.map((c) => {
-            const st = state.players[c.playerId];
-            const p = byId.get(c.playerId);
-            if (!st || !p) return null;
-            const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
-            return c.eligible ? (
-              <button
-                type="button"
-                key={c.playerId}
-                onClick={() => setSchedOutId(c.playerId)}
-                className="flex items-center gap-3 rounded-2xl bg-[#f7f6f0] p-3 text-left"
-              >
-                <Avatar player={p} className="h-12 w-12" />
-                <div className="min-w-0 flex-1 truncate text-lg font-bold">{p.name}</div>
-                <Badge tone="amber">{ratioPct} of target</Badge>
-              </button>
-            ) : (
-              <div
-                key={c.playerId}
-                className="flex items-center gap-3 rounded-2xl bg-neutral-100 p-3 opacity-60 ring-1 ring-hairline"
-              >
-                <Avatar player={p} className="h-12 w-12 grayscale" />
-                <div className="min-w-0 flex-1 truncate text-lg font-bold text-neutral-400">{p.name}</div>
-                <span className="text-sm text-neutral-500">fresh</span>
-              </div>
-            );
-          })}
-          <button type="button" onClick={closeFlows} className={btnGhost}>
+          <div className="grid grid-cols-2 gap-2">
+            {candidates.map((c) => {
+              const st = state.players[c.playerId];
+              const p = byId.get(c.playerId);
+              if (!st || !p) return null;
+              const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
+              return c.eligible ? (
+                <button
+                  type="button"
+                  key={c.playerId}
+                  onClick={() => setSchedOutId(c.playerId)}
+                  className="flex items-center gap-2 rounded-xl bg-[#f7f6f0] px-2 py-2 text-left active:scale-[0.97]"
+                >
+                  <Avatar player={p} className="h-9 w-9" />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
+                    <div className="text-[10px] font-bold uppercase text-[#ea580c]">{ratioPct}</div>
+                  </div>
+                </button>
+              ) : (
+                <div
+                  key={c.playerId}
+                  className="flex items-center gap-2 rounded-xl bg-neutral-100 px-2 py-2 opacity-60"
+                >
+                  <Avatar player={p} className="h-9 w-9 grayscale" />
+                  <div className="min-w-0">
+                    <div className="truncate text-sm font-bold text-neutral-400">{p.name.split(" ")[0]}</div>
+                    <div className="text-[10px] font-bold uppercase text-neutral-400">fresh</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <button type="button" onClick={closeFlows} className="py-1 text-sm font-bold text-neutral-400">
             Cancel
           </button>
         </section>

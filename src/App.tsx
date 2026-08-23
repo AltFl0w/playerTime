@@ -89,6 +89,33 @@ export default function App() {
     baseState.elapsedSec +
     (game?.runningSinceMs ? Math.max(0, Math.floor((now - game.runningSinceMs) / 1000)) : 0);
 
+  // Quarter pacing: the app is the timekeeper. At each boundary it pauses
+  // itself (water break — clock AND stints freeze) until the coach starts the
+  // next quarter; at the final whistle it offers the report.
+  const quarterLenSec = Math.max(
+    1,
+    Math.round(store.config.gameLengthSec / Math.max(1, store.config.quarterCount)),
+  );
+  const quarter = Math.min(store.config.quarterCount, Math.floor(elapsedSec / quarterLenSec) + 1);
+  // A break is any pause that lands exactly on a boundary (auto or manual).
+  const atBreak =
+    !!game && !baseState.ended && !clockRunning && elapsedSec > 0 && elapsedSec % quarterLenSec === 0;
+  const isFinalBreak = atBreak && quarter >= store.config.quarterCount;
+
+  // Auto-pause exactly once per boundary second while running.
+  const autoPausedAtRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!clockRunning || !game || baseState.ended) return;
+    if (elapsedSec > 0 && elapsedSec % quarterLenSec === 0 && autoPausedAtRef.current !== elapsedSec) {
+      autoPausedAtRef.current = elapsedSec;
+      stopAlarm();
+      setAlarm(null);
+      alarmOpenRef.current = false;
+      pushEvents([{ type: "PAUSE", atSec: elapsedSec }]);
+      patchGame((g) => ({ ...g, runningSinceMs: null }));
+    }
+  });
+
   // The engine is a pure function of events with no "now" parameter, so while
   // the clock runs we ask it for the world frozen at *this second* by computing
   // against a temporary PAUSE. Real log stays untouched.
@@ -343,6 +370,9 @@ export default function App() {
             state={state}
             elapsedSec={elapsedSec}
             clockRunning={clockRunning}
+            quarter={quarter}
+            atBreak={atBreak}
+            isFinalBreak={isFinalBreak}
             pendingSwaps={game.pendingSwaps}
             onPauseToggle={pauseToggle}
             onEnd={endGame}

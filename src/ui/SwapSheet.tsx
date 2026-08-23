@@ -13,42 +13,43 @@ interface Props {
 // the engine; the coach only picks timing.
 export function SwapSheet(props: Props) {
   const { outPlayer, inPlayer } = props;
+  const ready = !!outPlayer && !!inPlayer;
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1a1a1e]/40 p-4 pb-6">
-      <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+      <div className="w-full max-w-md rounded-3xl bg-white p-4 shadow-2xl">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-2">
           <Side player={outPlayer} label="OFF" ring="ring-red-500" />
-          <div className="text-3xl text-neutral-300">⇄</div>
+          <div className="text-2xl text-neutral-300">⇄</div>
           <Side player={inPlayer} label="IN" ring="ring-green-600" />
         </div>
-        <div className="mt-5 flex flex-col gap-3">
-          <button
-            type="button"
-            onClick={props.onSwapNow}
-            disabled={!outPlayer || !inPlayer}
-            className="w-full rounded-2xl bg-[#ea580c] px-4 py-6 text-xl font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] active:scale-[0.98] transition disabled:opacity-40"
-          >
-            Swap now
-          </button>
+        <button
+          type="button"
+          onClick={props.onSwapNow}
+          disabled={!ready}
+          className="mt-3 w-full rounded-xl bg-[#ea580c] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(234,88,12,0.35)] transition active:scale-[0.98] disabled:opacity-40"
+        >
+          Swap now
+        </button>
+        <div className="mt-2 flex gap-2">
           {[1, 2, 3].map((m) => (
             <button
               key={m}
               type="button"
               onClick={() => props.onSchedule(m)}
-              disabled={!outPlayer || !inPlayer}
-              className="w-full rounded-2xl bg-neutral-100 px-4 py-3 text-lg font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
+              disabled={!ready}
+              className="flex-1 rounded-xl bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
             >
-              In +{m} min
+              +{m} min
             </button>
           ))}
-          <button
-            type="button"
-            onClick={props.onCancel}
-            className="w-full rounded-2xl px-4 py-2 font-bold text-neutral-400"
-          >
-            Cancel
-          </button>
         </div>
+        <button
+          type="button"
+          onClick={props.onCancel}
+          className="w-full py-1.5 pt-2 text-sm font-bold text-neutral-400"
+        >
+          Cancel
+        </button>
       </div>
     </div>
   );
@@ -64,23 +65,23 @@ function Side({
   ring: string;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex flex-col items-center gap-1">
       {player ? (
         <>
-          <Avatar player={player} className={`h-28 w-28 ring-4 ${ring}`} />
-          <div className="max-w-[9rem] truncate text-center text-2xl font-extrabold">
-            {player.name}
+          <Avatar player={player} className={`h-20 w-20 ring-4 ${ring}`} />
+          <div className="max-w-[7.5rem] truncate text-center text-lg font-extrabold">
+            {player.name.split(" ")[0]}
           </div>
-          <div className="text-xs font-bold uppercase tracking-widest text-neutral-400">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-neutral-400">
             {label}
           </div>
         </>
       ) : (
         <>
-          <div className="flex h-28 w-28 items-center justify-center rounded-full bg-neutral-100 text-3xl text-neutral-300">
+          <div className="flex h-20 w-20 items-center justify-center rounded-full bg-neutral-100 text-2xl text-neutral-300">
             ?
           </div>
-          <div className="text-sm text-neutral-400">no suggestion</div>
+          <div className="text-xs text-neutral-400">no suggestion</div>
         </>
       )}
     </div>
