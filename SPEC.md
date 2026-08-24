@@ -29,13 +29,15 @@ rotations, meltdown recoveries, late arrivals — everything.
    theirs by exactly the stint he skipped. No dock math needed, no punishment window, no marathon risk.
 3. Parent later says "he's ready" → coach taps **Ready** (`MARK_READY`) → app ranks on-field kids by
    `played/target` descending (highest = most paid-up = fairest to pull). Fresh subs are shielded:
-   ineligible to come out until `shieldSec` on field regardless of ratio.
+   ranked below everyone and shown dimmed ("fresh") until `shieldSec` on field — but still selectable.
+   **Suggestions never block the coach**; the only hard rule is the field can't exceed `playersOnField`.
 4. Coach confirms **Now** or **+N min** → pending swap shown with countdown on all screens.
 
 ### Heat cap
 
 If any on-field player's current stint reaches `maxStintSec`, state sets `forcedSwap: true` —
-alarm fires off-cycle, that player outranks everyone as the OUT suggestion. Absolute override.
+alarm fires off-cycle, that player outranks everyone as the OUT suggestion, and the heat cap
+overrides shields in the ranking. Still dismissible — the coach always outranks the engine.
 
 ## Engine API (pure functions, no DOM/React/storage)
 
@@ -60,8 +62,10 @@ Edge cases the engine must handle correctly:
 ## In-game loop (UI)
 
 1. Pre-game: pick present kids, confirm config, START.
-2. Every `subIntervalSec` of running clock: audible alarm (WebAudio beep, vibration attempt guarded,
-   screen flash) showing planned `OUT ⇄ IN` names/photos big enough for a sideline glance.
+2. Every `subIntervalSec` of running clock: audible alarm (`<audio>`-element beep so iOS plays it on
+   silent, vibration attempt guarded — a no-op on iOS, screen flash) showing planned `OUT ⇄ IN`
+   names/photos big enough for a sideline glance. The clock auto-pauses at each quarter boundary
+   (water break; stints freeze) until the coach starts the next quarter.
 3. Clock keeps running through dead balls. Coach taps each name as reality happens:
    SUB_IN / SUB_OUT confirmed separately; DECLINE instead of IN if refused.
 4. Live board: every kid's minutes vs target, who's next up, pending swaps with countdown.
@@ -71,9 +75,11 @@ Edge cases the engine must handle correctly:
 ## Screens
 
 Setup (roster CRUD, photo upload compressed client-side, notes like "blonde hair, glasses"),
-Pre-game (availability toggles, config, START), Live (clock, swap modal, ready list, pending swaps),
-Report. Mobile-first, dark, huge tap targets. localStorage persistence keyed by season/team;
-event log shape makes Supabase realtime sync a phase-2 drop-in.
+Pre-game (availability toggles, fair-share preview, collapsed season settings with quarter-length
+as the knob), Live (clock, field/list views, editable swap sheet, ready list, pending swaps),
+Report (fairness verdict + one dense rotation-chart line per kid). Mobile-first, light, huge tap
+targets, installable PWA (wake lock, standalone display; deployed via GitHub Pages — see README).
+localStorage persistence; event log shape makes Supabase realtime sync a phase-2 drop-in.
 
 ## Out of scope v1
 
