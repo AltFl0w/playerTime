@@ -97,7 +97,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
     presentIds.length > 0
       ? (config.gameLengthSec * Math.min(config.playersOnField, presentIds.length)) / presentIds.length
       : 0;
-  const rotations = Math.floor(config.gameLengthSec / Math.max(1, config.subIntervalSec));
+  const subAlarmCount = Math.floor(config.gameLengthSec / Math.max(1, config.subIntervalSec));
 
   const summaryLine = `${config.playersOnField}v${config.playersOnField} · ${config.quarterCount} × ${quarterLenMin} min quarters · sub every ${Math.round(config.subIntervalSec / 60)} min · max on ${Math.round(config.maxStintSec / 60)}m · min on ${Math.round(config.shieldSec / 60)}m`;
 
@@ -160,12 +160,20 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-2xl font-black leading-tight tabular-nums">
-              Each kid plays ~{fmtClock(perKidSec)}
-            </div>
-            <div className="mt-0.5 text-sm font-bold text-neutral-500">
-              ~{rotations} rotation{rotations === 1 ? "" : "s"}
-            </div>
+            {/* Below the field size, there's no bench to rotate from — say
+                that plainly instead of running the fair-share math into a
+                degenerate "everyone plays 100%" line that reads like a bug. */}
+            {presentIds.length === 0 ? (
+              <div className="text-2xl font-black leading-tight">Nobody marked here yet.</div>
+            ) : presentIds.length <= config.playersOnField ? (
+              <div className="text-2xl font-black leading-tight">
+                Only {presentIds.length} here — everyone plays the whole game, no subs
+              </div>
+            ) : (
+              <div className="text-2xl font-black leading-tight tabular-nums">
+                Each kid plays ~{fmtClock(perKidSec)} · sub alarm {subAlarmCount}× per game
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -257,7 +265,12 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       </section>
 
       <div className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-        <button type="button" onClick={() => onStart(presentIds)} className={`${btnStart}`}>
+        <button
+          type="button"
+          onClick={() => onStart(presentIds)}
+          disabled={presentIds.length === 0}
+          className={`${btnStart} disabled:opacity-40`}
+        >
           Start game
         </button>
       </div>
