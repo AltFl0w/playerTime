@@ -38,11 +38,13 @@ export function SwapSheet(props: Props) {
           <Side player={inPlayer} label="IN" ring="ring-green-600" />
         </div>
 
-        {outCandidates.length > 0 && (
-          <ChipRow label="off" candidates={outCandidates} selectedId={outPlayer?.id ?? null} onPick={props.onChangeOut} />
-        )}
-        {inCandidates.length > 0 && (
-          <ChipRow label="in" candidates={inCandidates} selectedId={inPlayer?.id ?? null} onPick={props.onChangeIn} />
+        {/* Side-by-side columns mirror the OFF ⇄ IN pair above, so the coach
+            scans one column per side instead of skipping through a mixed row. */}
+        {(outCandidates.length > 0 || inCandidates.length > 0) && (
+          <div className="mt-3 grid grid-cols-2 gap-3">
+            <ChipColumn label="off" candidates={outCandidates} selectedId={outPlayer?.id ?? null} onPick={props.onChangeOut} />
+            <ChipColumn label="in" candidates={inCandidates} selectedId={inPlayer?.id ?? null} onPick={props.onChangeIn} />
+          </div>
         )}
 
         <button
@@ -83,10 +85,9 @@ export function SwapSheet(props: Props) {
   );
 }
 
-// A labeled row of tappable kid chips — lets the coach override one side of
-// the pair without leaving the sheet. Wraps so a full 7+ kid roster still
-// fits without scrolling.
-function ChipRow({
+// A labeled column of tappable kid chips — lets the coach override one side
+// of the pair without leaving the sheet.
+function ChipColumn({
   label,
   candidates,
   selectedId,
@@ -98,9 +99,9 @@ function ChipRow({
   onPick: (id: string) => void;
 }) {
   return (
-    <div className="mt-3">
+    <div className="min-w-0">
       <div className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">{label}</div>
-      <div className="mt-1 flex flex-wrap gap-1.5">
+      <div className="mt-1 flex flex-col gap-1.5">
         {candidates.map((p) => {
           const selected = p.id === selectedId;
           return (
@@ -108,7 +109,7 @@ function ChipRow({
               type="button"
               key={p.id}
               onClick={() => onPick(p.id)}
-              className={`flex min-h-[44px] items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-left active:scale-[0.97] ${
+              className={`flex min-h-[44px] w-full items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-left active:scale-[0.97] ${
                 selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
               }`}
             >
