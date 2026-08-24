@@ -4,15 +4,20 @@ import { Avatar } from "./bits";
 interface Props {
   outPlayer: Player | null;
   inPlayer: Player | null;
+  outCandidates: Player[];
+  inCandidates: Player[];
+  onChangeOut: (id: string) => void;
+  onChangeIn: (id: string) => void;
   onSwapNow: () => void;
   onSchedule: (delayMin: number) => void;
   onCancel: () => void;
 }
 
-// Tap-a-kid confirmation sheet from Field view. The pair is pre-decided by
-// the engine; the coach only picks timing.
+// Tap-a-kid confirmation sheet from Field view. The engine pre-selects a
+// pair, but a mid-game coach needs to override either side — the field
+// changes shape too fast to be locked into one suggestion.
 export function SwapSheet(props: Props) {
-  const { outPlayer, inPlayer } = props;
+  const { outPlayer, inPlayer, outCandidates, inCandidates } = props;
   // A missing side is allowed to swap alone (pull off with no replacement, or
   // send in with nobody coming off) — only block when both sides are empty.
   const canAct = !!outPlayer || !!inPlayer;
@@ -32,6 +37,14 @@ export function SwapSheet(props: Props) {
           <div className="text-2xl text-neutral-300">⇄</div>
           <Side player={inPlayer} label="IN" ring="ring-green-600" />
         </div>
+
+        {outCandidates.length > 0 && (
+          <ChipRow label="off" candidates={outCandidates} selectedId={outPlayer?.id ?? null} onPick={props.onChangeOut} />
+        )}
+        {inCandidates.length > 0 && (
+          <ChipRow label="in" candidates={inCandidates} selectedId={inPlayer?.id ?? null} onPick={props.onChangeIn} />
+        )}
+
         <button
           type="button"
           onClick={props.onSwapNow}
@@ -40,18 +53,23 @@ export function SwapSheet(props: Props) {
         >
           {swapLabel}
         </button>
-        <div className="mt-2 flex gap-2">
-          {[1, 2, 3].map((m) => (
-            <button
-              key={m}
-              type="button"
-              onClick={() => props.onSchedule(m)}
-              disabled={!bothPresent}
-              className="flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
-            >
-              +{m} min
-            </button>
-          ))}
+        <div className="mt-2 flex flex-col gap-1">
+          <div className="px-0.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
+            or swap later
+          </div>
+          <div className="flex gap-2">
+            {[1, 2, 3].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => props.onSchedule(m)}
+                disabled={!bothPresent}
+                className="flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98] disabled:opacity-40"
+              >
+                in {m} min
+              </button>
+            ))}
+          </div>
         </div>
         <button
           type="button"
@@ -60,6 +78,47 @@ export function SwapSheet(props: Props) {
         >
           Cancel
         </button>
+      </div>
+    </div>
+  );
+}
+
+// A labeled row of tappable kid chips — lets the coach override one side of
+// the pair without leaving the sheet. Wraps so a full 7+ kid roster still
+// fits without scrolling.
+function ChipRow({
+  label,
+  candidates,
+  selectedId,
+  onPick,
+}: {
+  label: string;
+  candidates: Player[];
+  selectedId: string | null;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">{label}</div>
+      <div className="mt-1 flex flex-wrap gap-1.5">
+        {candidates.map((p) => {
+          const selected = p.id === selectedId;
+          return (
+            <button
+              type="button"
+              key={p.id}
+              onClick={() => onPick(p.id)}
+              className={`flex min-h-[44px] items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-left active:scale-[0.97] ${
+                selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
+              }`}
+            >
+              <Avatar player={p} className="h-7 w-7" />
+              <span className={`truncate text-sm font-bold ${selected ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
+                {p.name.split(" ")[0]}
+              </span>
+            </button>
+          );
+        })}
       </div>
     </div>
   );

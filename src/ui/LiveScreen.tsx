@@ -133,8 +133,7 @@ export function LiveScreen({
     ({ st }) => st.onField && st.availability === "available",
   );
   const waitingRows = sortedRows.filter(
-    ({ p, st }) =>
-      !st.onField && st.availability === "available" && p.id !== sheet?.inId,
+    ({ st }) => !st.onField && st.availability === "available",
   );
 
   const candidates =
@@ -370,17 +369,22 @@ export function LiveScreen({
           </div>
 
           {schedPlayer && (
-            <div className="flex gap-2">
-              {[1, 2, 3, 5].map((mins) => (
-                <button
-                  type="button"
-                  key={mins}
-                  onClick={() => scheduleReadySwap(mins)}
-                  className="min-h-[44px] flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] active:scale-[0.98]"
-                >
-                  +{mins} min
-                </button>
-              ))}
+            <div className="flex flex-col gap-1">
+              <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
+                or swap later
+              </div>
+              <div className="flex gap-2">
+                {[1, 2, 3, 5].map((mins) => (
+                  <button
+                    type="button"
+                    key={mins}
+                    onClick={() => scheduleReadySwap(mins)}
+                    className="min-h-[44px] flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] active:scale-[0.98]"
+                  >
+                    in {mins} min
+                  </button>
+                ))}
+              </div>
             </div>
           )}
 
@@ -606,6 +610,10 @@ export function LiveScreen({
         <SwapSheet
           outPlayer={sheet.outId ? byId.get(sheet.outId) ?? null : null}
           inPlayer={sheet.inId ? byId.get(sheet.inId) ?? null : null}
+          outCandidates={onFieldRows.map(({ p }) => p)}
+          inCandidates={waitingRows.map(({ p }) => p)}
+          onChangeOut={(id) => setSheet((s) => (s ? { ...s, outId: id } : s))}
+          onChangeIn={(id) => setSheet((s) => (s ? { ...s, inId: id } : s))}
           onSwapNow={() => {
             if (sheet.outId) onSubOut(sheet.outId);
             if (sheet.inId) onSubIn(sheet.inId);
