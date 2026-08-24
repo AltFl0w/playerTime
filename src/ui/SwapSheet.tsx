@@ -30,24 +30,29 @@ interface Props {
   onSchedule: (delayMin: number) => void;
   onRefuseIn: (id: string) => void;
   onCancel: () => void;
+  fieldFull: boolean;
 }
 
 // Tap-a-kid confirmation sheet from Field view. The engine pre-selects a
 // pair, but a mid-game coach needs to override either side — the field
 // changes shape too fast to be locked into one suggestion.
 export function SwapSheet(props: Props) {
-  const { outPlayer, inPlayer, outCandidates, inCandidates } = props;
-  // A missing side is allowed to swap alone (pull off with no replacement, or
-  // send in with nobody coming off) — only block when both sides are empty.
-  const canAct = !!outPlayer || !!inPlayer;
+  const { outPlayer, inPlayer, outCandidates, inCandidates, fieldFull } = props;
+  // One-sided actions are allowed (pull off with no replacement, or send in to
+  // an open slot) — but an IN with no OUT on a full field would overfill past
+  // playersOnField, so that one is blocked until someone is picked to come off.
+  const inBlocked = !outPlayer && !!inPlayer && fieldFull;
+  const canAct = (!!outPlayer || !!inPlayer) && !inBlocked;
   const bothPresent = !!outPlayer && !!inPlayer;
   const swapLabel = bothPresent
     ? "Swap now"
     : outPlayer
       ? "Pull off — play short"
-      : inPlayer
-        ? "Send in"
-        : "Swap now";
+      : inBlocked
+        ? "Pick who comes off"
+        : inPlayer
+          ? "Send in"
+          : "Swap now";
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-[#1a1a1e]/40 p-4 pb-6">
       <div className="w-full max-w-md rounded-[7px] bg-white p-4 shadow-2xl">

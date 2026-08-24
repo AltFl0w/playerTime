@@ -150,7 +150,12 @@ export function LiveScreen({
   // on the engine's top choice so its advice stays visible even after the
   // coach taps someone else.
   const rankedOut = engine.rankOutCandidates(state, config);
-  const topOutId = rankedOut.find((c) => c.eligible)?.playerId ?? null;
+  // Shield nudges, never blanks the OFF side: with everyone fresh (early game)
+  // fall back to the least-bad pull, or Next-up taps degrade into one-sided
+  // "Send in"s that overfill the field.
+  const topOutId =
+    rankedOut.find((c) => c.eligible)?.playerId ?? rankedOut[0]?.playerId ?? null;
+  const fieldFull = onFieldRows.length >= config.playersOnField;
   const sheetOutCandidates: OutChip[] = rankedOut.flatMap((c) => {
     const st = state.players[c.playerId];
     const p = byId.get(c.playerId);
@@ -516,7 +521,7 @@ export function LiveScreen({
                     type="button"
                     key={p.id}
                     onClick={() =>
-                      setSheet({ outId: engine.suggestOut(state, config), inId: p.id })
+                      setSheet({ outId: topOutId, inId: p.id })
                     }
                     className={`flex items-center gap-2.5 rounded-[7px] py-1.5 pl-2.5 pr-4 active:scale-[0.97] ${
                       isNext ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-white ring-1 ring-hairline"
@@ -584,7 +589,11 @@ export function LiveScreen({
                   {st.availability === "available" && !st.onField && (
                     <button
                       type="button"
-                      onClick={() => onSubIn(p.id)}
+                      onClick={() =>
+                        // Full field: route through the sheet so someone comes
+                        // off — direct sub-in would overfill past playersOnField.
+                        fieldFull ? setSheet({ outId: topOutId, inId: p.id }) : onSubIn(p.id)
+                      }
                       className="rounded-lg bg-green-50 px-3 py-2 text-sm font-bold text-green-700 ring-1 ring-green-200"
                     >
                       Sub in now
@@ -656,6 +665,7 @@ export function LiveScreen({
           inPlayer={sheet.inId ? byId.get(sheet.inId) ?? null : null}
           outCandidates={sheetOutCandidates}
           inCandidates={sheetInCandidates}
+          fieldFull={fieldFull}
           onChangeOut={(id) => setSheet((s) => (s ? { ...s, outId: id } : s))}
           onChangeIn={(id) => setSheet((s) => (s ? { ...s, inId: id } : s))}
           onSwapNow={() => {
