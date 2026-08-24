@@ -60,6 +60,9 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
   // Most kids show up, so everyone starts present and the coach taps only the
   // no-shows. Late arrivals join mid-game via "Arrived" in the list view.
   const [absent, setAbsent] = useState<Set<string>>(() => new Set());
+  // Settings persist all season, so collapsed is the normal case — a coach
+  // shouldn't have to scroll a full stepper stack before every single game.
+  const [expanded, setExpanded] = useState(false);
 
   const presentIds = roster.filter((p) => !absent.has(p.id)).map((p) => p.id);
 
@@ -70,6 +73,42 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       else next.add(id);
       return next;
     });
+  }
+
+  // Quarter length is the knob the coach actually thinks in, but the stored
+  // schema is still gameLengthSec + quarterCount — derive display from it and
+  // write both fields together on every change so they can never drift apart.
+  const quarterLenMin = Math.max(
+    1,
+    Math.round(config.gameLengthSec / Math.max(1, config.quarterCount) / 60),
+  );
+  const totalMin = Math.round(config.gameLengthSec / 60);
+  const quarterLenSec = config.gameLengthSec / Math.max(1, config.quarterCount);
+
+  function setQuarterLenMin(v: number) {
+    onConfigChange({ ...config, gameLengthSec: config.quarterCount * v * 60 });
+  }
+  function setQuarterCount(v: number) {
+    // Keep the per-quarter length the coach just set constant; only the total changes.
+    onConfigChange({ ...config, quarterCount: v, gameLengthSec: v * quarterLenMin * 60 });
+  }
+
+  const perKidSec =
+    presentIds.length > 0
+      ? (config.gameLengthSec * Math.min(config.playersOnField, presentIds.length)) / presentIds.length
+      : 0;
+  const rotations = Math.floor(config.gameLengthSec / Math.max(1, config.subIntervalSec));
+
+  const summaryLine = `${config.playersOnField}v${config.playersOnField} · ${config.quarterCount} × ${quarterLenMin} min quarters · sub every ${Math.round(config.subIntervalSec / 60)} min · max on ${Math.round(config.maxStintSec / 60)}m · min on ${Math.round(config.shieldSec / 60)}m`;
+
+  const warnings: string[] = [];
+  if (config.shieldSec >= config.subIntervalSec) {
+    warnings.push(
+      `Min time on (${Math.round(config.shieldSec / 60)}m) ≥ sub interval (${Math.round(config.subIntervalSec / 60)}m) — kids will still be shielded when the sub alarm rings`,
+    );
+  }
+  if (config.subIntervalSec > quarterLenSec) {
+    warnings.push("Sub interval is longer than a quarter — some quarters will have no sub alarm");
   }
 
   return (
@@ -113,73 +152,108 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
             );
           })}
         </div>
-      </section>
-
-      <section className="rounded-[7px] bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-        <Stepper
-          label="On field"
-          value={config.playersOnField}
-          min={1}
-          max={Math.max(1, roster.length)}
-          onChange={(v) => onConfigChange({ ...config, playersOnField: v })}
-        />
-        <div className="h-px bg-hairline" />
-        <Stepper
-          label="Game length"
-          value={Math.round(config.gameLengthSec / 60)}
-          suffix="m"
-          min={5}
-          max={120}
-          onChange={(v) => onConfigChange({ ...config, gameLengthSec: v * 60 })}
-        />
-        <div className="h-px bg-hairline" />
-        <Stepper
-          label="Quarters"
-          value={config.quarterCount}
-          suffix=""
-          min={1}
-          max={8}
-          onChange={(v) => onConfigChange({ ...config, quarterCount: v })}
-        />
-        <div className="h-px bg-hairline" />
-        <Stepper
-          label="Sub every"
-          value={Math.round(config.subIntervalSec / 60)}
-          suffix="m"
-          min={1}
-          max={30}
-          onChange={(v) => onConfigChange({ ...config, subIntervalSec: v * 60 })}
-        />
-        <p className="pb-1 pt-0.5 text-[11px] text-neutral-400">
-          Alarm every {fmtClock(config.subIntervalSec)} · auto-pause each quarter for water
+        <p className="mt-2 text-[11px] text-neutral-400">
+          No-shows can still join later — mark them Arrived during the game.
         </p>
       </section>
 
-      <section className="rounded-[7px] bg-white px-4 py-2 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-        <h2 className="pt-1.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
-          Heat rules
-        </h2>
-        <div className="mt-1" />
-        <Stepper
-          label="Max time on (heat)"
-          value={Math.round(config.maxStintSec / 60)}
-          suffix="m"
-          min={1}
-          max={60}
-          onChange={(v) => onConfigChange({ ...config, maxStintSec: v * 60 })}
-        />
-        <div className="h-px bg-hairline" />
-        <Stepper
-          label="Min time on before sub-out"
-          value={Math.round(config.shieldSec / 60)}
-          suffix="m"
-          min={0}
-          max={30}
-          onChange={(v) => onConfigChange({ ...config, shieldSec: v * 60 })}
-        />
-        <p className="pb-1 pt-0.5 text-[11px] text-neutral-400">
-          Nobody stays on past the max; a kid can't be pulled before the min.
-        </p>
+      <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="text-2xl font-black leading-tight tabular-nums">
+              Each kid plays ~{fmtClock(perKidSec)}
+            </div>
+            <div className="mt-0.5 text-sm font-bold text-neutral-500">
+              ~{rotations} rotation{rotations === 1 ? "" : "s"}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setExpanded((e) => !e)}
+            className="min-h-[44px] shrink-0 rounded-[7px] bg-neutral-100 px-3.5 py-2 text-sm font-bold text-[#1a1a1e] transition active:scale-[0.98]"
+          >
+            {expanded ? "Done" : "Edit"}
+          </button>
+        </div>
+
+        {!expanded && <p className="mt-2 text-xs text-neutral-500">{summaryLine}</p>}
+
+        {warnings.length > 0 && (
+          <div className="mt-3 flex flex-col gap-1.5">
+            {warnings.map((w) => (
+              <p key={w} className="rounded-[7px] bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+                {w}
+              </p>
+            ))}
+          </div>
+        )}
+
+        {expanded && (
+          <>
+            <div className="mt-3 h-px bg-hairline" />
+            <Stepper
+              label="On field"
+              value={config.playersOnField}
+              min={1}
+              max={Math.max(1, roster.length)}
+              onChange={(v) => onConfigChange({ ...config, playersOnField: v })}
+            />
+            <div className="h-px bg-hairline" />
+            <Stepper
+              label="Quarter length"
+              value={quarterLenMin}
+              suffix="m"
+              min={4}
+              max={30}
+              onChange={setQuarterLenMin}
+            />
+            <div className="h-px bg-hairline" />
+            <Stepper
+              label="Quarters"
+              value={config.quarterCount}
+              suffix=""
+              min={1}
+              max={8}
+              onChange={setQuarterCount}
+            />
+            <p className="pb-1 pt-0.5 text-[11px] text-neutral-400">= {totalMin} min game</p>
+            <div className="h-px bg-hairline" />
+            <Stepper
+              label="Sub every"
+              value={Math.round(config.subIntervalSec / 60)}
+              suffix="m"
+              min={1}
+              max={30}
+              onChange={(v) => onConfigChange({ ...config, subIntervalSec: v * 60 })}
+            />
+            <p className="pb-1 pt-0.5 text-[11px] text-neutral-400">
+              Alarm every {fmtClock(config.subIntervalSec)} · auto-pause each quarter for water
+            </p>
+
+            <div className="mt-2 h-px bg-hairline" />
+            <h2 className="pt-2 text-xs font-bold uppercase tracking-wider text-neutral-400">Heat rules</h2>
+            <Stepper
+              label="Max time on (heat)"
+              value={Math.round(config.maxStintSec / 60)}
+              suffix="m"
+              min={1}
+              max={60}
+              onChange={(v) => onConfigChange({ ...config, maxStintSec: v * 60 })}
+            />
+            <div className="h-px bg-hairline" />
+            <Stepper
+              label="Min time before sub-out"
+              value={Math.round(config.shieldSec / 60)}
+              suffix="m"
+              min={0}
+              max={30}
+              onChange={(v) => onConfigChange({ ...config, shieldSec: v * 60 })}
+            />
+            <p className="pb-1 pt-0.5 text-[11px] text-neutral-400">
+              Nobody stays on past the max; a kid can't be pulled before the min.
+            </p>
+          </>
+        )}
       </section>
 
       <div className="sticky bottom-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
