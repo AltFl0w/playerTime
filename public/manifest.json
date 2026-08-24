@@ -2,12 +2,13 @@
   "name": "PlayerTime",
   "short_name": "PlayerTime",
   "display": "standalone",
-  "start_url": "/",
+  "start_url": "./",
+  "scope": "./",
   "background_color": "#f3f5f8",
   "theme_color": "#f3f5f8",
   "icons": [
     {
-      "src": "/icon.svg",
+      "src": "icon.svg",
       "sizes": "any",
       "type": "image/svg+xml"
     }
