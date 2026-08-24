@@ -386,32 +386,27 @@ export function LiveScreen({
                 if (!st || !p) return null;
                 const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
                 const selected = c.playerId === schedOutId;
-                return c.eligible ? (
+                // Shield never blocks — a fresh kid is dimmed as a nudge but
+                // stays tappable. The coach outranks every suggestion.
+                return (
                   <button
                     type="button"
                     key={c.playerId}
                     onClick={() => setSchedOutId(c.playerId)}
                     className={`flex items-center gap-2 rounded-[7px] px-2 py-2 text-left active:scale-[0.97] ${
                       selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
-                    }`}
+                    } ${!c.eligible && !selected ? "opacity-60" : ""}`}
                   >
-                    <Avatar player={p} className="h-9 w-9" />
+                    <Avatar player={p} className={`h-9 w-9 ${!c.eligible ? "grayscale" : ""}`} />
                     <div className="min-w-0">
                       <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
-                      <div className="text-[10px] font-bold uppercase text-[#2563eb]">{ratioPct}</div>
+                      <div
+                        className={`text-[10px] font-bold uppercase ${c.eligible ? "text-[#2563eb]" : "text-neutral-400"}`}
+                      >
+                        {c.eligible ? ratioPct : "fresh"}
+                      </div>
                     </div>
                   </button>
-                ) : (
-                  <div
-                    key={c.playerId}
-                    className="flex items-center gap-2 rounded-[7px] bg-neutral-100 px-2 py-2 opacity-60"
-                  >
-                    <Avatar player={p} className="h-9 w-9 grayscale" />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold text-neutral-400">{p.name.split(" ")[0]}</div>
-                      <div className="text-[10px] font-bold uppercase text-neutral-400">fresh</div>
-                    </div>
-                  </div>
                 );
               })}
             </div>
@@ -608,7 +603,7 @@ export function LiveScreen({
                       Sub out
                     </button>
                   )}
-                  {st.availability === "available" && !st.onField && (
+                  {st.availability === "available" && (
                     <button
                       type="button"
                       onClick={() => setConfirmLeaveId(p.id)}
@@ -701,6 +696,9 @@ export function LiveScreen({
           confirmLabel="Leave game"
           danger
           onConfirm={() => {
+            // A hurt kid can leave straight from the field — one confirm does
+            // the sub-out and the leave; no two-step hunt mid-incident.
+            if (state.players[confirmLeaveId]?.onField) onSubOut(confirmLeaveId);
             onSetAvailability(confirmLeaveId, false);
             setConfirmLeaveId(null);
           }}
