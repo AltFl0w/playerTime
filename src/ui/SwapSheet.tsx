@@ -1,15 +1,34 @@
 import type { Player } from "../types";
+import { fmtClock } from "../lib/format";
 import { Avatar } from "./bits";
+
+export interface OutChip {
+  player: Player;
+  stintSec: number;
+  playedSec: number;
+  suggested: boolean;
+  reason?: string;
+  // Shield not yet met — the coach can still pull them, just dimmed as a nudge.
+  fresh: boolean;
+}
+
+export interface InChip {
+  player: Player;
+  playedSec: number;
+  suggested: boolean;
+  reason?: string;
+}
 
 interface Props {
   outPlayer: Player | null;
   inPlayer: Player | null;
-  outCandidates: Player[];
-  inCandidates: Player[];
+  outCandidates: OutChip[];
+  inCandidates: InChip[];
   onChangeOut: (id: string) => void;
   onChangeIn: (id: string) => void;
   onSwapNow: () => void;
   onSchedule: (delayMin: number) => void;
+  onRefuseIn: (id: string) => void;
   onCancel: () => void;
 }
 
@@ -42,8 +61,8 @@ export function SwapSheet(props: Props) {
             scans one column per side instead of skipping through a mixed row. */}
         {(outCandidates.length > 0 || inCandidates.length > 0) && (
           <div className="mt-3 grid grid-cols-2 gap-3">
-            <ChipColumn label="off" candidates={outCandidates} selectedId={outPlayer?.id ?? null} onPick={props.onChangeOut} />
-            <ChipColumn label="in" candidates={inCandidates} selectedId={inPlayer?.id ?? null} onPick={props.onChangeIn} />
+            <OutColumn candidates={outCandidates} selectedId={outPlayer?.id ?? null} onPick={props.onChangeOut} />
+            <InColumn candidates={inCandidates} selectedId={inPlayer?.id ?? null} onPick={props.onChangeIn} />
           </div>
         )}
 
@@ -55,6 +74,17 @@ export function SwapSheet(props: Props) {
         >
           {swapLabel}
         </button>
+
+        {inPlayer && (
+          <button
+            type="button"
+            onClick={() => props.onRefuseIn(inPlayer.id)}
+            className="mt-2 min-h-[44px] w-full rounded-[7px] bg-red-50 px-3 py-2 text-sm font-bold text-red-700 ring-1 ring-red-200 transition active:scale-[0.98]"
+          >
+            {inPlayer.name.split(" ")[0]} won't go in
+          </button>
+        )}
+
         <div className="mt-2 flex flex-col gap-1">
           <div className="px-0.5 text-xs font-bold uppercase tracking-wider text-neutral-400">
             or swap later
@@ -85,38 +115,99 @@ export function SwapSheet(props: Props) {
   );
 }
 
-// A labeled column of tappable kid chips — lets the coach override one side
-// of the pair without leaving the sheet.
-function ChipColumn({
-  label,
+// SUGGESTED gets a "PICK" tag + reason even when the coach has tapped a
+// different chip, so the engine's advice stays visible as a reference point.
+function PickTag({ reason }: { reason?: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <span className="text-[9px] font-extrabold uppercase tracking-widest text-[#2563eb]">Pick</span>
+      {reason && <span className="truncate text-[9px] font-semibold uppercase text-neutral-400">{reason}</span>}
+    </div>
+  );
+}
+
+function OutColumn({
   candidates,
   selectedId,
   onPick,
 }: {
-  label: string;
-  candidates: Player[];
+  candidates: OutChip[];
   selectedId: string | null;
   onPick: (id: string) => void;
 }) {
   return (
     <div className="min-w-0">
-      <div className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">{label}</div>
-      <div className="mt-1 flex flex-col gap-1.5">
-        {candidates.map((p) => {
-          const selected = p.id === selectedId;
+      <div className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">off</div>
+      {/* Suggested candidate sorts first (engine order), so it's always
+          visible above the fold even once this scrolls past ~5 rows. */}
+      <div className="mt-1 flex max-h-[19rem] flex-col gap-1.5 overflow-y-auto">
+        {candidates.map((c) => {
+          const selected = c.player.id === selectedId;
           return (
             <button
               type="button"
-              key={p.id}
-              onClick={() => onPick(p.id)}
+              key={c.player.id}
+              onClick={() => onPick(c.player.id)}
+              className={`flex min-h-[44px] w-full items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-left active:scale-[0.97] ${
+                selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
+              } ${c.fresh ? "opacity-60" : ""}`}
+            >
+              <Avatar player={c.player} className={`h-7 w-7 ${c.fresh ? "grayscale" : ""}`} />
+              <div className="min-w-0 flex-1">
+                <span className={`block truncate text-sm font-bold ${selected ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
+                  {c.player.name.split(" ")[0]}
+                </span>
+                <span className="block truncate text-[10px] font-semibold tabular-nums text-neutral-500">
+                  {fmtClock(c.stintSec)}
+                  <span className="text-neutral-400"> · {fmtClock(c.playedSec)}</span>
+                </span>
+                {c.suggested && <PickTag reason={c.reason} />}
+                {c.fresh && <span className="text-[9px] font-bold uppercase text-neutral-400">fresh</span>}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function InColumn({
+  candidates,
+  selectedId,
+  onPick,
+}: {
+  candidates: InChip[];
+  selectedId: string | null;
+  onPick: (id: string) => void;
+}) {
+  return (
+    <div className="min-w-0">
+      <div className="px-0.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400">in</div>
+      {/* Suggested candidate sorts first (engine order), so it's always
+          visible above the fold even once this scrolls past ~5 rows. */}
+      <div className="mt-1 flex max-h-[19rem] flex-col gap-1.5 overflow-y-auto">
+        {candidates.map((c) => {
+          const selected = c.player.id === selectedId;
+          return (
+            <button
+              type="button"
+              key={c.player.id}
+              onClick={() => onPick(c.player.id)}
               className={`flex min-h-[44px] w-full items-center gap-1.5 rounded-[7px] px-2.5 py-1.5 text-left active:scale-[0.97] ${
                 selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
               }`}
             >
-              <Avatar player={p} className="h-7 w-7" />
-              <span className={`truncate text-sm font-bold ${selected ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
-                {p.name.split(" ")[0]}
-              </span>
+              <Avatar player={c.player} className="h-7 w-7" />
+              <div className="min-w-0 flex-1">
+                <span className={`block truncate text-sm font-bold ${selected ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
+                  {c.player.name.split(" ")[0]}
+                </span>
+                <span className="block truncate text-[10px] font-semibold tabular-nums text-neutral-500">
+                  {fmtClock(c.playedSec)}
+                </span>
+                {c.suggested && <PickTag reason={c.reason} />}
+              </div>
             </button>
           );
         })}

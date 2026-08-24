@@ -451,6 +451,7 @@ export default function App() {
             onMarkReady={(id) =>
               pushEvents([{ type: "MARK_READY", atSec: elapsedSec, playerId: id }])
             }
+            onDecline={(id) => pushEvents([{ type: "DECLINE", atSec: elapsedSec, playerId: id }])}
             onSetAvailability={(id, available) =>
               pushEvents([
                 { type: "SET_AVAILABILITY", atSec: elapsedSec, playerId: id, available },

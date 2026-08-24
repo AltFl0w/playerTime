@@ -4,7 +4,7 @@ import type { GameConfig, GameState, Player, PlayerTimeState } from "../types";
 import type { PendingSwap } from "../store";
 import { fmtClock } from "../lib/format";
 import { Avatar, Badge, SectionTitle, btnAccent, type BadgeTone } from "./bits";
-import { SwapSheet } from "./SwapSheet";
+import { SwapSheet, type InChip, type OutChip } from "./SwapSheet";
 import { ConfirmSheet } from "./ConfirmSheet";
 
 interface Props {
@@ -22,6 +22,7 @@ interface Props {
   onSubOut: (id: string) => void;
   onSubIn: (id: string) => void;
   onMarkReady: (id: string) => void;
+  onDecline: (id: string) => void;
   onSetAvailability: (id: string, available: boolean) => void;
   onScheduleSwap: (outId: string, inId: string, delayMin: number) => void;
   onCancelPending: (id: string) => void;
@@ -103,6 +104,7 @@ export function LiveScreen({
   onSubOut,
   onSubIn,
   onMarkReady,
+  onDecline,
   onSetAvailability,
   onScheduleSwap,
   onCancelPending,
@@ -142,6 +144,48 @@ export function LiveScreen({
       : [];
   const pickPlayer = pickOutFor ? byId.get(pickOutFor) ?? null : null;
   const schedPlayer = schedOutId ? byId.get(schedOutId) ?? null : null;
+
+  // Rich candidate lists for the SwapSheet: engine order (best pull / most-owed
+  // first) decorated with the times a coach needs to decide, plus a "PICK" tag
+  // on the engine's top choice so its advice stays visible even after the
+  // coach taps someone else.
+  const rankedOut = engine.rankOutCandidates(state, config);
+  const topOutId = rankedOut.find((c) => c.eligible)?.playerId ?? null;
+  const sheetOutCandidates: OutChip[] = rankedOut.flatMap((c) => {
+    const st = state.players[c.playerId];
+    const p = byId.get(c.playerId);
+    if (!st || !p) return [];
+    const suggested = c.playerId === topOutId;
+    return [
+      {
+        player: p,
+        stintSec: st.currentStintSec,
+        playedSec: st.playedSec,
+        suggested,
+        reason: suggested ? (st.currentStintSec >= config.maxStintSec ? "over heat cap" : "most time on") : undefined,
+        fresh: !c.eligible,
+      },
+    ];
+  });
+
+  const rankedIn = engine.rankInCandidates(state);
+  const topInId = rankedIn[0]?.playerId ?? null;
+  const sheetInCandidates: InChip[] = rankedIn.flatMap((c) => {
+    const st = state.players[c.playerId];
+    const p = byId.get(c.playerId);
+    if (!st || !p) return [];
+    const suggested = c.playerId === topInId;
+    return [{ player: p, playedSec: st.playedSec, suggested, reason: suggested ? "least played" : undefined }];
+  });
+
+  // Refusing from the sheet declines the kid (they drop into "Waiting to come
+  // back") and advances the IN slot to whoever's next owed, rather than
+  // leaving the sheet pointed at a kid who just said no.
+  function refuseSheetIn(id: string) {
+    onDecline(id);
+    const next = rankedIn.find((c) => c.playerId !== id)?.playerId ?? null;
+    setSheet((s) => (s ? { ...s, inId: next } : s));
+  }
 
   const subCountdown = fmtClock(
     Math.max(0, (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec),
@@ -610,8 +654,8 @@ export function LiveScreen({
         <SwapSheet
           outPlayer={sheet.outId ? byId.get(sheet.outId) ?? null : null}
           inPlayer={sheet.inId ? byId.get(sheet.inId) ?? null : null}
-          outCandidates={onFieldRows.map(({ p }) => p)}
-          inCandidates={waitingRows.map(({ p }) => p)}
+          outCandidates={sheetOutCandidates}
+          inCandidates={sheetInCandidates}
           onChangeOut={(id) => setSheet((s) => (s ? { ...s, outId: id } : s))}
           onChangeIn={(id) => setSheet((s) => (s ? { ...s, inId: id } : s))}
           onSwapNow={() => {
@@ -623,6 +667,7 @@ export function LiveScreen({
             if (sheet.outId && sheet.inId) onScheduleSwap(sheet.outId, sheet.inId, m);
             closeFlows();
           }}
+          onRefuseIn={refuseSheetIn}
           onCancel={closeFlows}
         />
       )}
