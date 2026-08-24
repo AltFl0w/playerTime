@@ -99,7 +99,15 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
       : 0;
   const subAlarmCount = Math.floor(config.gameLengthSec / Math.max(1, config.subIntervalSec));
 
-  const summaryLine = `${config.playersOnField}v${config.playersOnField} · ${config.quarterCount} × ${quarterLenMin} min quarters · sub every ${Math.round(config.subIntervalSec / 60)} min · max on ${Math.round(config.maxStintSec / 60)}m · min on ${Math.round(config.shieldSec / 60)}m`;
+  // Collapsed summary as labeled value pairs, not a run-on sentence — the
+  // coach scans labels, they don't read paragraphs.
+  const summaryItems: Array<[string, string]> = [
+    ["format", `${config.playersOnField}v${config.playersOnField}`],
+    ["quarters", `${config.quarterCount} × ${quarterLenMin}m`],
+    ["sub every", `${Math.round(config.subIntervalSec / 60)}m`],
+    ["max on", `${Math.round(config.maxStintSec / 60)}m`],
+    ["min on", `${Math.round(config.shieldSec / 60)}m`],
+  ];
 
   const warnings: string[] = [];
   if (config.shieldSec >= config.subIntervalSec) {
@@ -159,22 +167,35 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
 
       <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            {/* Below the field size, there's no bench to rotate from — say
-                that plainly instead of running the fair-share math into a
-                degenerate "everyone plays 100%" line that reads like a bug. */}
-            {presentIds.length === 0 ? (
-              <div className="text-2xl font-black leading-tight">Nobody marked here yet.</div>
-            ) : presentIds.length <= config.playersOnField ? (
-              <div className="text-2xl font-black leading-tight">
-                Only {presentIds.length} here — everyone plays the whole game, no subs
+          {/* Below the field size, there's no bench to rotate from — say
+              that plainly instead of running the fair-share math into a
+              degenerate "everyone plays 100%" line that reads like a bug. */}
+          {presentIds.length === 0 ? (
+            <div className="py-1 text-lg font-extrabold leading-snug">Nobody marked here yet.</div>
+          ) : presentIds.length <= config.playersOnField ? (
+            <div className="py-1 text-lg font-extrabold leading-snug">
+              Only {presentIds.length} here — everyone plays the whole game, no subs
+            </div>
+          ) : (
+            <div className="flex gap-6">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                  each kid plays
+                </div>
+                <div className="text-3xl font-black leading-tight tabular-nums">
+                  ~{fmtClock(perKidSec)}
+                </div>
               </div>
-            ) : (
-              <div className="text-2xl font-black leading-tight tabular-nums">
-                Each kid plays ~{fmtClock(perKidSec)} · sub alarm {subAlarmCount}× per game
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-neutral-400">
+                  sub alarms
+                </div>
+                <div className="text-3xl font-black leading-tight tabular-nums">
+                  {subAlarmCount}×
+                </div>
               </div>
-            )}
-          </div>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setExpanded((e) => !e)}
@@ -184,7 +205,18 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
           </button>
         </div>
 
-        {!expanded && <p className="mt-2 text-xs text-neutral-500">{summaryLine}</p>}
+        {!expanded && (
+          <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 border-t border-hairline pt-3">
+            {summaryItems.map(([label, value]) => (
+              <div key={label}>
+                <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">
+                  {label}
+                </div>
+                <div className="text-sm font-extrabold tabular-nums">{value}</div>
+              </div>
+            ))}
+          </div>
+        )}
 
         {warnings.length > 0 && (
           <div className="mt-3 flex flex-col gap-1.5">
