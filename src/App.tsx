@@ -503,6 +503,7 @@ export default function App() {
           config={store.config}
           state={baseState}
           elapsedSec={baseState.elapsedSec}
+          events={game.events}
           startedAtMs={game.startedAtMs}
           onNewGame={newGame}
         />
