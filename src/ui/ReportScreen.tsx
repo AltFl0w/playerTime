@@ -102,10 +102,6 @@ export function ReportScreen({
     (_, i) => (i + 1) * quarterLenSec,
   ).filter((t) => t < finalSec);
 
-  // Every kid's bar shares one scale so the row-to-row comparison (the whole
-  // point of the screen) is visually honest, not just a per-kid percentage.
-  const scale = Math.max(1, ...rows.map((r) => r.st.playedSec), ...rows.map((r) => r.st.targetSec));
-
   // The payoff line: is this the even game the app promised?
   let verdict = "No playing time recorded.";
   if (eligibleRows.length > 0) {
@@ -169,74 +165,68 @@ export function ReportScreen({
         {dateLine && <p className="mt-1 text-sm text-neutral-500">{dateLine}</p>}
       </header>
 
-      <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-        <SectionTitle>Playing time</SectionTitle>
+      {/* Rotation chart: the whole team on one screen, one line per kid —
+          who played when (strip), how much (minutes), and how fair (delta).
+          Dense on purpose: the coach scans it, no scrolling. */}
+      <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+        <div className="mb-2 flex items-baseline justify-between">
+          <SectionTitle>Playing time</SectionTitle>
+          <span className="text-[10px] font-semibold text-neutral-400">
+            Q1{config.quarterCount > 1 ? `–Q${config.quarterCount}` : ""} · bars = on field
+          </span>
+        </div>
         {rows.length === 0 && <p className="text-neutral-400">No players recorded.</p>}
-        {rows.map(({ p, st }) => {
-          const deltaSec = Math.round(st.playedSec - st.targetSec);
-          const onTarget = Math.abs(deltaSec) <= ON_TARGET_TOLERANCE_SEC;
-          const fillPct = Math.min(100, (st.playedSec / scale) * 100);
-          const targetPct = Math.min(100, (st.targetSec / scale) * 100);
-          const stints = timelines.get(p.id) ?? [];
-          return (
-            <div key={p.id} className="rounded-[7px] bg-[#f1f3f6] p-4">
-              <div className="flex items-center gap-4">
-                <Avatar player={p} className="h-16 w-16" />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-xl font-extrabold">{p.name}</div>
-                  <div className="text-sm tabular-nums text-neutral-500">
-                    {st.shifts} shift{st.shifts === 1 ? "" : "s"} · longest {fmtClock(st.longestStintSec)}
-                  </div>
-                  {/* Played (fill) against fair target (tick) — one shared scale
-                      across every row makes the comparison honest, and an
-                      overplayed kid's fill simply runs past their own tick. */}
-                  <div
-                    className="relative mt-2 h-2 overflow-hidden rounded-full bg-hairline"
-                    role="img"
-                    aria-label={`${fmtMinutes(st.playedSec)} min played, target ${fmtMinutes(st.targetSec)} min`}
-                  >
-                    <div className="h-full rounded-full bg-[#1a1a1e]" style={{ width: `${fillPct}%` }} />
-                    <div className="absolute inset-y-0 w-[2px] bg-[#2563eb]" style={{ left: `${targetPct}%` }} />
-                  </div>
+        <div className="flex flex-col divide-y divide-hairline">
+          {rows.map(({ p, st }) => {
+            const deltaSec = Math.round(st.playedSec - st.targetSec);
+            const onTarget = Math.abs(deltaSec) <= ON_TARGET_TOLERANCE_SEC;
+            const stints = timelines.get(p.id) ?? [];
+            return (
+              <div key={p.id} className="flex items-center gap-2.5 py-2 first:pt-0 last:pb-0">
+                <Avatar player={p} className="h-8 w-8" />
+                <div className="w-[4.5rem] shrink-0 truncate text-sm font-bold">
+                  {p.name.split(" ")[0]}
                 </div>
-                <div className="flex flex-col items-end">
-                  <div className="text-3xl font-black tabular-nums text-[#1a1a1e]">
+                <div
+                  className="relative h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-hairline"
+                  role="img"
+                  aria-label={`${fmtMinutes(st.playedSec)} min played, target ${fmtMinutes(st.targetSec)} min`}
+                >
+                  {stints.map(([s, e], i) => (
+                    <div
+                      key={i}
+                      className="absolute inset-y-0 rounded-full bg-[#2563eb]"
+                      style={{
+                        left: `${(s / finalSec) * 100}%`,
+                        width: `${Math.max(0.6, ((e - s) / finalSec) * 100)}%`,
+                      }}
+                    />
+                  ))}
+                  {quarterTicks.map((t) => (
+                    <div
+                      key={t}
+                      className="absolute inset-y-0 w-px bg-white/80"
+                      style={{ left: `${(t / finalSec) * 100}%` }}
+                    />
+                  ))}
+                </div>
+                <div className="flex w-[4.75rem] shrink-0 flex-col items-end">
+                  <span className="text-base font-black leading-tight tabular-nums">
                     {fmtMinutes(st.playedSec)}
-                  </div>
-                  <div
-                    className={`text-xs font-extrabold tabular-nums ${
+                    <span className="text-[10px] font-bold text-neutral-400"> min</span>
+                  </span>
+                  <span
+                    className={`text-[10px] font-extrabold tabular-nums ${
                       onTarget ? "text-neutral-400" : deltaSec > 0 ? "text-green-600" : "text-amber-600"
                     }`}
                   >
                     {onTarget ? "on target" : `${deltaSec > 0 ? "+" : "−"}${fmtClock(Math.abs(deltaSec))}`}
-                  </div>
+                  </span>
                 </div>
               </div>
-
-              {/* When they were actually on the field — the "when did my kid
-                  play" answer a parent scans for at a glance. */}
-              <div className="relative mt-3 h-2 overflow-hidden rounded-full bg-hairline">
-                {stints.map(([s, e], i) => (
-                  <div
-                    key={i}
-                    className="absolute inset-y-0 rounded-full bg-[#2563eb]"
-                    style={{
-                      left: `${(s / finalSec) * 100}%`,
-                      width: `${Math.max(0.6, ((e - s) / finalSec) * 100)}%`,
-                    }}
-                  />
-                ))}
-                {quarterTicks.map((t) => (
-                  <div
-                    key={t}
-                    className="absolute inset-y-0 w-px bg-white/70"
-                    style={{ left: `${(t / finalSec) * 100}%` }}
-                  />
-                ))}
-              </div>
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
       </section>
 
       {notes.length > 0 && (
