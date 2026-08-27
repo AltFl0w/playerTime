@@ -1,7 +1,7 @@
 import { useState } from "react";
 import type { GameConfig, Player } from "../types";
 import { fmtClock } from "../lib/format";
-import { Avatar } from "./bits";
+import { Avatar, SunToggle } from "./bits";
 
 interface Props {
   roster: Player[];
@@ -9,6 +9,8 @@ interface Props {
   onConfigChange: (config: GameConfig) => void;
   onStart: (presentIds: string[]) => void;
   onBackToSetup: () => void;
+  sunMode: boolean;
+  onSunToggle: () => void;
 }
 
 function Stepper({
@@ -56,7 +58,7 @@ function Stepper({
   );
 }
 
-export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackToSetup }: Props) {
+export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackToSetup, sunMode, onSunToggle }: Props) {
   // Most kids show up, so everyone starts present and the coach taps only the
   // no-shows. Late arrivals join mid-game via "Arrived" in the list view.
   const [absent, setAbsent] = useState<Set<string>>(() => new Set());
@@ -107,6 +109,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
     ["sub every", `${Math.round(config.subIntervalSec / 60)}m`],
     ["max on", `${Math.round(config.maxStintSec / 60)}m`],
     ["min on", `${Math.round(config.shieldSec / 60)}m`],
+    ["display", sunMode ? "sun" : "normal"],
   ];
 
   const warnings: string[] = [];
@@ -227,6 +230,14 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
             ))}
           </div>
         )}
+
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
+          <div>
+            <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">Sun mode</div>
+            <div className="text-sm font-extrabold">High contrast outdoors</div>
+          </div>
+          <SunToggle on={sunMode} onToggle={onSunToggle} />
+        </div>
 
         {expanded && (
           <>

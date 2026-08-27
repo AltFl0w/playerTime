@@ -1,4 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+"use client";
+
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engine } from "./engine";
 import type { GameEvent, GameState, PlayerId } from "./types";
 import {
@@ -13,13 +15,17 @@ import {
 import { demoStore } from "./testing/demo";
 import { startAlarm, stopAlarm, unlockAudio } from "./lib/alarm";
 import { useWakeLock } from "./lib/wakeLock";
+import { useLiveHistoryTrap } from "./lib/historyTrap";
+import { formatUndone, lastUndoableSlice, undoLastCoachAction } from "./lib/undo";
 import { SetupScreen } from "./ui/SetupScreen";
 import { PreGameScreen } from "./ui/PreGameScreen";
 import { LiveScreen } from "./ui/LiveScreen";
 import { ReportScreen } from "./ui/ReportScreen";
 import { SwapAlarmModal } from "./ui/SwapAlarmModal";
 import { Toast } from "./ui/Toast";
+import { A2HSNudge } from "./ui/A2HSNudge";
 import { btnPrimary } from "./ui/bits";
+import { buildSwapChips } from "./ui/swapCandidates";
 
 type Screen = "setup" | "pregame" | "live" | "report";
 
@@ -36,7 +42,7 @@ interface ActiveAlarm {
 const EMPTY_EVENTS: GameEvent[] = [];
 
 const ROOT_CLASSES =
-  "min-h-dvh bg-[#f3f5f8] px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-[#1a1a1e]";
+  "pt-app min-h-dvh bg-canvas px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-ink";
 
 export default function App() {
   const [store, setStore] = useState<Store>(loadStore);
@@ -53,18 +59,6 @@ export default function App() {
   const [alarm, setAlarm] = useState<ActiveAlarm | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
-
-  // Non-blocking swap confirmation — the coach's next tap must never wait.
-  function showToast(text: string) {
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-    setToast({ id: Date.now(), text });
-    toastTimerRef.current = window.setTimeout(() => setToast(null), 2200);
-  }
-
-  // Suppression state for alarms. Interval counter initializes from the loaded
-  // clock so a mid-game refresh doesn't blast stale alarms. Must include the
-  // wall-clock offset since runningSinceMs — event-derived elapsed alone
-  // under-counts a reload mid-segment and fires a stale SUB TIME alarm.
   const intervalFiredRef = useRef<number>(
     Math.floor(
       (store.game?.events.length ?? 0) > 0
@@ -81,14 +75,32 @@ export default function App() {
   const alertedPendingRef = useRef<Set<string>>(new Set());
   const alarmOpenRef = useRef(false);
 
+  function showToast(text: string) {
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+    setToast({ id: Date.now(), text });
+    toastTimerRef.current = window.setTimeout(() => setToast(null), 2200);
+  }
+
   useEffect(() => {
     saveStore(store);
   }, [store]);
+
+  useLayoutEffect(() => {
+    document.documentElement.classList.toggle("pt-sun", store.sunMode);
+  }, [store.sunMode]);
 
   useEffect(() => {
     const unlock = () => unlockAudio();
     document.addEventListener("pointerdown", unlock, { once: true });
     return () => document.removeEventListener("pointerdown", unlock);
+  }, []);
+
+  useEffect(() => {
+    function onVis() {
+      if (document.visibilityState === "visible") unlockAudio();
+    }
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
   useEffect(() => {
@@ -110,6 +122,20 @@ export default function App() {
   const clockRunning = !!game && baseState.clockRunning && !baseState.ended;
 
   useWakeLock(screen === "live" && !!game && !baseState.ended);
+  useLiveHistoryTrap(screen === "live" && !!game && !baseState.ended);
+
+  useEffect(() => {
+    const live = screen === "live" && !!game && !baseState.ended;
+    document.documentElement.classList.toggle("pt-live", live);
+    return () => document.documentElement.classList.remove("pt-live");
+  }, [screen, game, baseState.ended]);
+
+  useEffect(() => {
+    if (screen !== "live") return;
+    const onDown = () => unlockAudio();
+    document.addEventListener("pointerdown", onDown, true);
+    return () => document.removeEventListener("pointerdown", onDown, true);
+  }, [screen]);
   const elapsedSec =
     baseState.elapsedSec +
     (game?.runningSinceMs ? Math.max(0, Math.floor((now - game.runningSinceMs) / 1000)) : 0);
@@ -275,19 +301,21 @@ export default function App() {
 
     const idx = Math.floor(elapsedSec / Math.max(1, store.config.subIntervalSec));
     if (forcedNow && !wasForced) {
+      const chips = buildSwapChips(state, store.config, store.roster);
       openAlarm({
         kind: "forced",
-        outId: engine.suggestOut(state, store.config),
-        inId: engine.suggestIn(state, store.config),
+        outId: chips.topOutId,
+        inId: chips.topInId,
         outDone: false,
         inDone: false,
       });
     } else if (idx > intervalFiredRef.current) {
       intervalFiredRef.current = idx;
+      const chips = buildSwapChips(state, store.config, store.roster);
       openAlarm({
         kind: "interval",
-        outId: engine.suggestOut(state, store.config),
-        inId: engine.suggestIn(state, store.config),
+        outId: chips.topOutId,
+        inId: chips.topInId,
         outDone: false,
         inDone: false,
       });
@@ -309,6 +337,7 @@ export default function App() {
     if (fullyResolved) {
       alarmOpenRef.current = false;
       stopAlarm();
+      unlockAudio();
       // A resolved scheduled swap is done — drop it so the tile stops pulsing "NOW".
       if (alarm.kind === "pending" && alarm.pendingId) {
         const pendingId = alarm.pendingId;
@@ -324,7 +353,29 @@ export default function App() {
   function dismissAlarm() {
     alarmOpenRef.current = false;
     stopAlarm();
+    unlockAudio();
     setAlarm(null);
+  }
+
+  function retargetAlarm(side: "out" | "in", id: string) {
+    setAlarm((a) => {
+      if (!a) return a;
+      if (side === "out" && !a.outDone) return { ...a, outId: id };
+      if (side === "in" && !a.inDone) return { ...a, inId: id };
+      return a;
+    });
+  }
+
+  function undoLast() {
+    if (!game || alarm) return;
+    const result = undoLastCoachAction(game);
+    if (!result) return;
+    patchGame(() => result.game);
+    showToast(formatUndone(result.undone, (id) => byId.get(id)?.name ?? ""));
+  }
+
+  function toggleSun() {
+    setStore((s) => ({ ...s, sunMode: !s.sunMode }));
   }
 
   function confirmOut() {
@@ -365,6 +416,10 @@ export default function App() {
   }
 
   const byId = useMemo(() => new Map(store.roster.map((p) => [p.id, p])), [store.roster]);
+  const swapChips = useMemo(
+    () => buildSwapChips(state, store.config, store.roster),
+    [state, store.config, store.roster],
+  );
   const alarmOutPlayer = alarm?.outId ? byId.get(alarm.outId) ?? null : null;
   const alarmInPlayer = alarm?.inId ? byId.get(alarm.inId) ?? null : null;
 
@@ -383,6 +438,11 @@ export default function App() {
 
   return (
     <div className={ROOT_CLASSES}>
+      {(screen === "setup" || screen === "pregame") && (
+        <div className="mx-auto mb-3 max-w-md">
+          <A2HSNudge />
+        </div>
+      )}
       {screen === "setup" && (
         <SetupScreen
           roster={store.roster}
@@ -422,6 +482,8 @@ export default function App() {
           onConfigChange={(config) => setStore((s) => ({ ...s, config }))}
           onStart={startGame}
           onBackToSetup={() => setScreen("setup")}
+          sunMode={store.sunMode}
+          onSunToggle={toggleSun}
         />
       )}
 
@@ -493,6 +555,10 @@ export default function App() {
                 inDone: false,
               });
             }}
+            canUndo={!alarm && lastUndoableSlice(events) !== null}
+            onUndo={undoLast}
+            sunMode={store.sunMode}
+            onSunToggle={toggleSun}
           />
         </>
       )}
@@ -506,6 +572,7 @@ export default function App() {
           events={game.events}
           startedAtMs={game.startedAtMs}
           onNewGame={newGame}
+          onNotice={showToast}
         />
       )}
 
@@ -531,6 +598,10 @@ export default function App() {
           onConfirmIn={confirmIn}
           onRefuseIn={refuseIn}
           onDismiss={dismissAlarm}
+          outCandidates={swapChips.outCandidates}
+          inCandidates={swapChips.inCandidates}
+          onChangeOut={(id) => retargetAlarm("out", id)}
+          onChangeIn={(id) => retargetAlarm("in", id)}
         />
       )}
 

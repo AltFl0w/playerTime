@@ -66,3 +66,18 @@ export const btnAccent = `${btnBase} bg-[#2563eb] text-white shadow-[0_2px_10px_
 export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">{children}</h2>;
 }
+
+export function SunToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      aria-pressed={on}
+      className={`min-h-[44px] min-w-[44px] rounded-[7px] px-3 text-xs font-extrabold uppercase tracking-wider active:scale-[0.98] ${
+        on ? "bg-[#1a1a1e] text-white" : "bg-white text-[#1a1a1e] ring-1 ring-hairline"
+      }`}
+    >
+      {on ? "Sun on" : "Sun"}
+    </button>
+  );
+}

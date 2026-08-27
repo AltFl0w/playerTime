@@ -1,6 +1,8 @@
 import type { GameConfig, GameEvent, GameState, Player, PlayerId, PlayerTimeState } from "../types";
 import { fmtClock, fmtMinutes } from "../lib/format";
-import { Avatar, SectionTitle, btnPrimary } from "./bits";
+import { buildReportSummary } from "../lib/report";
+import { shareReport } from "../lib/reportShare";
+import { Avatar, SectionTitle, btnAccent, btnGhost } from "./bits";
 
 interface Props {
   roster: Player[];
@@ -10,12 +12,11 @@ interface Props {
   events: GameEvent[];
   startedAtMs: number | null;
   onNewGame: () => void;
+  onNotice: (text: string) => void;
 }
 
 type Row = { p: Player; st: PlayerTimeState };
 
-// A spread this small reads as "equal enough" to a parent — not a bug to explain.
-const FAIR_SPREAD_SEC = 90;
 const ON_TARGET_TOLERANCE_SEC = 30;
 
 // Replays SUB_IN/SUB_OUT into per-kid [start, end] stint ranges for the
@@ -52,28 +53,6 @@ function buildStintTimelines(
   return timelines;
 }
 
-// A late SET_AVAILABILITY(true) or a mid-game SET_AVAILABILITY(false) is a
-// coach-relevant attendance quirk, not just internal bookkeeping — surface it.
-function buildAttendanceNotes(events: GameEvent[]): {
-  lateAt: Map<PlayerId, number>;
-  leftAt: Map<PlayerId, number>;
-} {
-  const ordered = events.slice().sort((a, b) => a.atSec - b.atSec);
-  const lateAt = new Map<PlayerId, number>();
-  const leftAt = new Map<PlayerId, number>();
-  const seenAvailable = new Set<PlayerId>();
-  for (const ev of ordered) {
-    if (ev.type !== "SET_AVAILABILITY") continue;
-    if (ev.available) {
-      if (!seenAvailable.has(ev.playerId) && ev.atSec > 0) lateAt.set(ev.playerId, ev.atSec);
-      seenAvailable.add(ev.playerId);
-    } else if (ev.atSec > 0 && !leftAt.has(ev.playerId)) {
-      leftAt.set(ev.playerId, ev.atSec);
-    }
-  }
-  return { lateAt, leftAt };
-}
-
 export function ReportScreen({
   roster,
   config,
@@ -82,17 +61,14 @@ export function ReportScreen({
   events,
   startedAtMs,
   onNewGame,
+  onNotice,
 }: Props) {
   const rows: Row[] = roster
     .map((p) => ({ p, st: state.players[p.id] }))
     .filter((r): r is Row => !!r.st)
     .sort((a, b) => b.st.playedSec - a.st.playedSec);
 
-  // Kids marked absent the whole game never had a fairness stake in it —
-  // leave them out of the verdict entirely.
-  const eligibleRows = rows.filter((r) => !(r.st.targetSec === 0 && r.st.playedSec === 0));
-
-  const { lateAt, leftAt } = buildAttendanceNotes(events);
+  const summary = buildReportSummary(roster, config, state, elapsedSec, events, startedAtMs);
   const finalSec = Math.max(1, elapsedSec);
   const timelines = buildStintTimelines(events, finalSec);
 
@@ -102,67 +78,14 @@ export function ReportScreen({
     (_, i) => (i + 1) * quarterLenSec,
   ).filter((t) => t < finalSec);
 
-  // The payoff line: is this the even game the app promised?
-  let verdict = "No playing time recorded.";
-  if (eligibleRows.length > 0) {
-    const spread =
-      Math.max(...eligibleRows.map((r) => r.st.playedSec)) -
-      Math.min(...eligibleRows.map((r) => r.st.playedSec));
-    if (spread <= FAIR_SPREAD_SEC) {
-      verdict = `Even game — everyone within ${fmtClock(spread)}`;
-    } else {
-      // targetSec already accounts for late arrival / limited availability,
-      // so the real outlier is whoever's furthest below their OWN target —
-      // not just whoever happened to play the fewest raw minutes.
-      const worst = eligibleRows.reduce((min, r) =>
-        r.st.playedSec - r.st.targetSec < min.st.playedSec - min.st.targetSec ? r : min,
-      );
-      const deltaSec = Math.round(worst.st.targetSec - worst.st.playedSec);
-      if (deltaSec > 15) {
-        const reason = lateAt.has(worst.p.id)
-          ? "arrived late"
-          : leftAt.has(worst.p.id)
-            ? "left early"
-            : undefined;
-        verdict = `${worst.p.name.split(" ")[0]} played ${fmtClock(deltaSec)} less${reason ? ` — ${reason}` : ""}`;
-      } else {
-        const maxRow = eligibleRows.reduce((mx, r) => (r.st.playedSec > mx.st.playedSec ? r : mx));
-        const minRow = eligibleRows.reduce((mn, r) => (r.st.playedSec < mn.st.playedSec ? r : mn));
-        verdict = `Playing time varied — ${fmtClock(spread)} between ${maxRow.p.name.split(" ")[0]} and ${minRow.p.name.split(" ")[0]}`;
-      }
-    }
-  }
-
-  const dateLine = startedAtMs
-    ? new Date(startedAtMs).toLocaleDateString(undefined, {
-        weekday: "long",
-        month: "long",
-        day: "numeric",
-      })
-    : "";
-
-  const notes: string[] = [
-    ...Array.from(lateAt.entries()).map(([id, atSec]) => {
-      const name = roster.find((p) => p.id === id)?.name ?? "A player";
-      return `${name} arrived at ${fmtClock(atSec)}`;
-    }),
-    ...Array.from(leftAt.entries()).map(([id, atSec]) => {
-      const name = roster.find((p) => p.id === id)?.name ?? "A player";
-      return `${name} left at ${fmtClock(atSec)}`;
-    }),
-    ...rows
-      .filter((r) => r.st.declines > 0)
-      .map((r) => `${r.p.name} declined ${r.st.declines} shift${r.st.declines === 1 ? "" : "s"}`),
-  ];
-
   return (
     <div className="flex flex-col gap-5">
       <header className="rounded-[7px] bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
         <div className="text-xs font-bold uppercase tracking-widest text-[#2563eb]">
-          final · {config.playersOnField}v{config.playersOnField} · {fmtClock(elapsedSec)}
+          final · {summary.formatLabel} · {summary.elapsedLabel}
         </div>
-        <h1 className="mt-2 text-2xl font-black leading-snug">{verdict}</h1>
-        {dateLine && <p className="mt-1 text-sm text-neutral-500">{dateLine}</p>}
+        <h1 className="mt-2 text-2xl font-black leading-snug">{summary.verdict}</h1>
+        {summary.dateLine && <p className="mt-1 text-sm text-neutral-500">{summary.dateLine}</p>}
       </header>
 
       {/* Rotation chart: the whole team on one screen, one line per kid —
@@ -229,11 +152,11 @@ export function ReportScreen({
         </div>
       </section>
 
-      {notes.length > 0 && (
+      {summary.notes.length > 0 && (
         <section className="rounded-[7px] bg-accenttint p-4 ring-1 ring-accent/20">
           <div className="text-xs font-bold uppercase tracking-wider text-orange-700/70">Game notes</div>
           <div className="mt-1 flex flex-col gap-0.5">
-            {notes.map((n, i) => (
+            {summary.notes.map((n, i) => (
               <p key={i} className="py-0.5 text-sm font-bold text-orange-700">
                 {n}
               </p>
@@ -242,11 +165,22 @@ export function ReportScreen({
         </section>
       )}
 
-      <div className="pb-[env(safe-area-inset-bottom)]">
-        <button type="button" onClick={onNewGame} className={btnPrimary}>
+      <div className="flex flex-col gap-2 pb-[env(safe-area-inset-bottom)]">
+        <button
+          type="button"
+          onClick={async () => {
+            const result = await shareReport(summary);
+            if (result === "copied") onNotice("Copied — paste in the parent chat");
+            if (result === "unavailable") onNotice("Screenshot this card for the parent group chat.");
+          }}
+          className={btnAccent}
+        >
+          Share
+        </button>
+        <button type="button" onClick={onNewGame} className={btnGhost}>
           New game
         </button>
-        <p className="mt-3 text-center text-xs text-neutral-400">
+        <p className="mt-1 text-center text-xs text-neutral-400">
           Screenshot this card for the parent group chat.
         </p>
       </div>

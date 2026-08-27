@@ -22,6 +22,7 @@ export interface Store {
   roster: Player[];
   config: GameConfig;
   game: GameRecord | null;
+  sunMode: boolean;
 }
 
 const STORAGE_KEY = "playertime:v1";
@@ -36,7 +37,7 @@ export function uid(): string {
 }
 
 export function emptyStore(): Store {
-  return { version: 1, roster: [], config: { ...DEFAULT_CONFIG }, game: null };
+  return { version: 1, roster: [], config: { ...DEFAULT_CONFIG }, game: null, sunMode: false };
 }
 
 // Version-mismatched or corrupt data is discarded wholesale rather than
@@ -52,6 +53,7 @@ export function loadStore(): Store {
       roster: parsed.roster,
       config: { ...DEFAULT_CONFIG, ...(parsed.config ?? {}) },
       game: parsed.game ?? null,
+      sunMode: parsed.sunMode === true,
     };
   } catch {
     return emptyStore();
