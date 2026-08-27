@@ -38,10 +38,18 @@ export function uid(): string {
 
 // Brandon's real team — pre-loaded whenever the roster is empty so a fresh
 // install (or a full reset) starts game-ready instead of with an empty screen.
-const DEFAULT_ROSTER_NAMES = ["Joey", "Joshua", "Stetson", "Paxton", "Ethan", "Mckay", "Noah"];
+export const TEAM_ROSTER: Player[] = [
+  { id: "p-joey", name: "Joey" },
+  { id: "p-joshua", name: "Joshua" },
+  { id: "p-stetson", name: "Stetson" },
+  { id: "p-paxton", name: "Paxton" },
+  { id: "p-ethan", name: "Ethan" },
+  { id: "p-mckay", name: "Mckay" },
+  { id: "p-noah", name: "Noah" },
+];
 
 function defaultRoster(): Player[] {
-  return DEFAULT_ROSTER_NAMES.map((name) => ({ id: uid(), name }));
+  return TEAM_ROSTER.map((p) => ({ ...p }));
 }
 
 export function emptyStore(): Store {
