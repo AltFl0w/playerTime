@@ -10,18 +10,48 @@
   --color-accenttint: #e8f0fe;
 }
 
+@layer base {
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+}
+
 /* Alarm screen-flash — attention purpose only (fires with the swap alarm) */
 @keyframes ptFlash {
-  0%, 100% {
-    background-color: #f4f5f7;
+  0%,
+  100% {
+    background-color: #f3f5f8;
   }
   50% {
-    background-color: #dbeafe;
+    background-color: #93c5fd;
+  }
+}
+
+@keyframes ptFlashSun {
+  0%,
+  100% {
+    background-color: #ffffff;
+  }
+  50% {
+    background-color: #93c5fd;
   }
 }
 
 .pt-alarm {
   animation: ptFlash 0.6s ease-in-out infinite;
+}
+
+html.pt-alarm,
+html.pt-alarm .pt-app,
+html.pt-alarm .pt-alarm-modal {
+  animation: ptFlash 0.6s ease-in-out infinite;
+}
+
+html.pt-sun.pt-alarm,
+html.pt-sun.pt-alarm .pt-app,
+html.pt-sun.pt-alarm .pt-alarm-modal {
+  animation: ptFlashSun 0.45s steps(2, jump-none) infinite;
 }
 
 /* Toast: quick drop-in, no loop, never blocks input */
@@ -39,4 +69,40 @@
 .pt-toast {
   transform: translate(-50%, 0);
   animation: ptToast 0.18s ease-out;
+}
+
+/* Kill iOS pull-to-refresh / rubber-band while a live game is on screen */
+.pt-live {
+  overscroll-behavior: none;
+}
+
+html.pt-sun {
+  --color-canvas: #ffffff;
+  --color-card: #ffffff;
+  --color-hairline: #c5cad3;
+  --color-ink: #0a0a0c;
+  --color-mutedink: #3f3f46;
+  --color-accent: #2563eb;
+  --color-accenttint: #dbeafe;
+}
+
+html.pt-sun .text-neutral-400 {
+  color: #3f3f46;
+}
+html.pt-sun .text-neutral-500 {
+  color: #27272a;
+}
+html.pt-sun .text-neutral-300 {
+  color: #52525b;
+}
+
+html.pt-sun .pt-gauge-track {
+  stroke: #c5cad3;
+  stroke-width: 8;
+}
+html.pt-sun .pt-gauge-arc {
+  stroke-width: 8;
+}
+html.pt-sun .pt-stint-bar {
+  height: 0.625rem;
 }

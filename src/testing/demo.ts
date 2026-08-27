@@ -57,5 +57,5 @@ export function buildDemoGame(config: GameConfig = DEFAULT_CONFIG) {
 }
 
 export function demoStore(): Store {
-  return { version: 1, roster: DEMO_ROSTER.map((p) => ({ ...p })), config: { ...DEFAULT_CONFIG }, game: buildDemoGame() };
+  return { version: 1, roster: DEMO_ROSTER.map((p) => ({ ...p })), config: { ...DEFAULT_CONFIG }, game: buildDemoGame(), sunMode: false };
 }

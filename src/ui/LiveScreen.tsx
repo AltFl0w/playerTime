@@ -3,9 +3,10 @@ import { engine } from "../engine";
 import type { GameConfig, GameState, Player, PlayerTimeState } from "../types";
 import type { PendingSwap } from "../store";
 import { fmtClock } from "../lib/format";
-import { Avatar, Badge, SectionTitle, btnAccent, type BadgeTone } from "./bits";
-import { SwapSheet, type InChip, type OutChip } from "./SwapSheet";
+import { Avatar, Badge, SectionTitle, SunToggle, btnAccent, type BadgeTone } from "./bits";
+import { SwapSheet } from "./SwapSheet";
 import { ConfirmSheet } from "./ConfirmSheet";
+import { buildSwapChips } from "./swapCandidates";
 
 interface Props {
   roster: Player[];
@@ -27,6 +28,10 @@ interface Props {
   onScheduleSwap: (outId: string, inId: string, delayMin: number) => void;
   onCancelPending: (id: string) => void;
   onFirePending: (id: string) => void;
+  canUndo: boolean;
+  onUndo: () => void;
+  sunMode: boolean;
+  onSunToggle: () => void;
 }
 
 type Row = { p: Player; st: PlayerTimeState };
@@ -70,13 +75,14 @@ function KidGauge({
   return (
     <div className={`relative h-16 w-16 shrink-0 ${clamped >= 1 ? "animate-pulse" : ""}`}>
       <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
-        <circle cx="42" cy="42" r={R} fill="none" stroke="#e7e4db" strokeWidth="5" />
+        <circle cx="42" cy="42" r={R} fill="none" className="pt-gauge-track" stroke="#e7e4db" strokeWidth="5" />
         {clamped > 0 && (
           <circle
             cx="42"
             cy="42"
             r={R}
             fill="none"
+            className="pt-gauge-arc"
             stroke={color}
             strokeWidth="5"
             strokeLinecap="round"
@@ -109,6 +115,10 @@ export function LiveScreen({
   onScheduleSwap,
   onCancelPending,
   onFirePending,
+  canUndo,
+  onUndo,
+  sunMode,
+  onSunToggle,
 }: Props) {
   const [view, setView] = useState<"field" | "list">("field");
   // Swap sheet: pre-decided pair awaiting timing confirmation.
@@ -145,50 +155,17 @@ export function LiveScreen({
   const pickPlayer = pickOutFor ? byId.get(pickOutFor) ?? null : null;
   const schedPlayer = schedOutId ? byId.get(schedOutId) ?? null : null;
 
-  // Rich candidate lists for the SwapSheet: engine order (best pull / most-owed
-  // first) decorated with the times a coach needs to decide, plus a "PICK" tag
-  // on the engine's top choice so its advice stays visible even after the
-  // coach taps someone else.
-  const rankedOut = engine.rankOutCandidates(state, config);
-  // Shield nudges, never blanks the OFF side: with everyone fresh (early game)
-  // fall back to the least-bad pull, or Next-up taps degrade into one-sided
-  // "Send in"s that overfill the field.
-  const topOutId =
-    rankedOut.find((c) => c.eligible)?.playerId ?? rankedOut[0]?.playerId ?? null;
+  const chips = buildSwapChips(state, config, roster);
+  const { outCandidates: sheetOutCandidates, inCandidates: sheetInCandidates, topOutId } = chips;
   const fieldFull = onFieldRows.length >= config.playersOnField;
-  const sheetOutCandidates: OutChip[] = rankedOut.flatMap((c) => {
-    const st = state.players[c.playerId];
-    const p = byId.get(c.playerId);
-    if (!st || !p) return [];
-    const suggested = c.playerId === topOutId;
-    return [
-      {
-        player: p,
-        stintSec: st.currentStintSec,
-        playedSec: st.playedSec,
-        suggested,
-        reason: suggested ? (st.currentStintSec >= config.maxStintSec ? "over heat cap" : "most time on") : undefined,
-        fresh: !c.eligible,
-      },
-    ];
-  });
-
-  const rankedIn = engine.rankInCandidates(state);
-  const topInId = rankedIn[0]?.playerId ?? null;
-  const sheetInCandidates: InChip[] = rankedIn.flatMap((c) => {
-    const st = state.players[c.playerId];
-    const p = byId.get(c.playerId);
-    if (!st || !p) return [];
-    const suggested = c.playerId === topInId;
-    return [{ player: p, playedSec: st.playedSec, suggested, reason: suggested ? "least played" : undefined }];
-  });
+  const inactiveRows = sortedRows.filter(({ st }) => st.availability === "inactive");
 
   // Refusing from the sheet declines the kid (they drop into "Waiting to come
   // back") and advances the IN slot to whoever's next owed, rather than
   // leaving the sheet pointed at a kid who just said no.
   function refuseSheetIn(id: string) {
     onDecline(id);
-    const next = rankedIn.find((c) => c.playerId !== id)?.playerId ?? null;
+    const next = sheetInCandidates.find((c) => c.player.id !== id)?.player.id ?? null;
     setSheet((s) => (s ? { ...s, inId: next } : s));
   }
 
@@ -231,7 +208,9 @@ export function LiveScreen({
             {clockRunning ? `Q${quarter} · next sub ${subCountdown}` : atBreak ? `quarter ${quarter} over` : "PAUSED"}
           </div>
         </div>
-        <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
+        <div className="flex shrink-0 items-center gap-2">
+          <SunToggle on={sunMode} onToggle={onSunToggle} />
+          <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
           <button
             type="button"
             onClick={() => setView("field")}
@@ -246,6 +225,7 @@ export function LiveScreen({
           >
             List
           </button>
+          </div>
         </div>
       </div>
 
@@ -537,6 +517,31 @@ export function LiveScreen({
             </div>
           </section>
 
+          {inactiveRows.length > 0 && (
+            <section>
+              <div className="mb-2 flex items-baseline justify-between">
+                <SectionTitle>Not here</SectionTitle>
+                <span className="text-xs text-neutral-400">tap when they arrive</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2.5">
+                {inactiveRows.map(({ p }) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => onSetAvailability(p.id, true)}
+                    className="flex min-h-[44px] items-center gap-2.5 rounded-[7px] bg-white py-1.5 pl-2.5 pr-4 ring-1 ring-hairline active:scale-[0.97]"
+                  >
+                    <Avatar player={p} className="h-10 w-10 grayscale" />
+                    <div className="min-w-0 flex-1 text-left">
+                      <div className="truncate text-base font-bold leading-tight">{p.name.split(" ")[0]}</div>
+                      <div className="text-[11px] font-extrabold uppercase text-[#2563eb]">Arrived</div>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
           <p className="pb-2 text-center text-xs text-neutral-500">
             top: stint · bottom: total · tap a kid to pull them off
           </p>
@@ -573,7 +578,7 @@ export function LiveScreen({
                   <Badge tone={status.tone}>{status.label}</Badge>
                 </div>
                 {showStint && (
-                  <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-hairline">
+                  <div className="pt-stint-bar mt-2 h-1.5 overflow-hidden rounded-full bg-hairline">
                     <div
                       className={`h-full rounded-full ${frac >= 1 ? "animate-pulse bg-red-500" : frac >= 0.75 ? "bg-amber-400" : "bg-green-600"}`}
                       style={{ width: `${Math.min(100, frac * 100)}%` }}
@@ -639,18 +644,29 @@ export function LiveScreen({
 
       {/* Thumb-zone control — the one button the coach reaches for most,
           pinned within reach while running around */}
-      <div className="sticky bottom-0 bg-[#f3f5f8] pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-        <button
-          type="button"
-          onClick={onPauseToggle}
-          className={`w-full rounded-[7px] px-4 py-4 text-lg font-extrabold transition active:scale-[0.98] ${
-            clockRunning
-              ? "bg-white text-[#1a1a1e] shadow-[0_2px_8px_rgba(26,26,30,0.18)] ring-1 ring-hairline"
-              : "bg-[#2563eb] text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)]"
-          }`}
-        >
-          {clockRunning ? "Pause" : "Play"}
-        </button>
+      <div className="sticky bottom-0 bg-canvas pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
+        <div className="flex gap-2">
+          {canUndo && (
+            <button
+              type="button"
+              onClick={onUndo}
+              className="min-h-[44px] min-w-[44px] shrink-0 rounded-[7px] bg-white px-4 py-4 text-base font-bold text-neutral-500 ring-1 ring-hairline active:scale-[0.98]"
+            >
+              Undo
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={onPauseToggle}
+            className={`flex-1 rounded-[7px] px-4 py-4 text-lg font-extrabold transition active:scale-[0.98] ${
+              clockRunning
+                ? "bg-white text-[#1a1a1e] shadow-[0_2px_8px_rgba(26,26,30,0.18)] ring-1 ring-hairline"
+                : "bg-[#2563eb] text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)]"
+            }`}
+          >
+            {clockRunning ? "Pause" : "Play"}
+          </button>
+        </div>
       </div>
 
       {/* Tap-a-kid swap confirmation */}
@@ -674,6 +690,15 @@ export function LiveScreen({
           }}
           onRefuseIn={refuseSheetIn}
           onCancel={closeFlows}
+          onLeaveOut={
+            sheet.outId
+              ? () => {
+                  const id = sheet.outId;
+                  closeFlows();
+                  if (id) setConfirmLeaveId(id);
+                }
+              : undefined
+          }
         />
       )}
 

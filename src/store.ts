@@ -22,6 +22,7 @@ export interface Store {
   roster: Player[];
   config: GameConfig;
   game: GameRecord | null;
+  sunMode: boolean;
 }
 
 const STORAGE_KEY = "playertime:v1";
@@ -37,14 +38,14 @@ export function uid(): string {
 
 // Brandon's real team — pre-loaded whenever the roster is empty so a fresh
 // install (or a full reset) starts game-ready instead of with an empty screen.
-const DEFAULT_ROSTER_NAMES = ["Joseph", "Joshua", "Stetson", "Paxton", "Ethan", "Mckay", "Noah"];
+const DEFAULT_ROSTER_NAMES = ["Joey", "Joshua", "Stetson", "Paxton", "Ethan", "Mckay", "Noah"];
 
 function defaultRoster(): Player[] {
   return DEFAULT_ROSTER_NAMES.map((name) => ({ id: uid(), name }));
 }
 
 export function emptyStore(): Store {
-  return { version: 1, roster: defaultRoster(), config: { ...DEFAULT_CONFIG }, game: null };
+  return { version: 1, roster: defaultRoster(), config: { ...DEFAULT_CONFIG }, game: null, sunMode: false };
 }
 
 // Version-mismatched or corrupt data is discarded wholesale rather than
@@ -60,6 +61,7 @@ export function loadStore(): Store {
       roster: parsed.roster.length > 0 ? parsed.roster : defaultRoster(),
       config: { ...DEFAULT_CONFIG, ...(parsed.config ?? {}) },
       game: parsed.game ?? null,
+      sunMode: parsed.sunMode === true,
     };
   } catch {
     return emptyStore();

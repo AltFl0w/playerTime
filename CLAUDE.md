@@ -16,8 +16,10 @@ Equal-playtime tracker Brandon uses coaching his kids' soccer team. React + TS +
 ## iOS PWA constraints (hard-won, don't regress)
 
 - Alarm audio must go through an `<audio>` element (`src/lib/alarm.ts`) — iOS mutes WebAudio when the ringer switch is on silent. `navigator.vibrate` does not exist on iOS; the guarded call is a deliberate no-op.
+- Re-prime audio on `visibilitychange` and live-screen gestures. `stopAlarm()` must pause the `<audio>` node, never destroy it.
 - Wake lock (`src/lib/wakeLock.ts`) must be held on the live screen and re-acquired on `visibilitychange`.
-- Keep `base: "./"` in vite.config and relative URLs in `public/manifest.json` — the app serves from a subpath.
+- Live uses `overscroll-behavior: none` (`.pt-live`) plus a `pushState` trap (`src/lib/historyTrap.ts`) so iOS pull-to-refresh / swipe-back can't dump a running game.
+- Keep `base: "./"` in vite.config and relative URLs in `index.html` / `public/manifest.json` — the app serves from a subpath. iOS A2HS needs opaque PNG 180/192, not SVG.
 
 ## UX rules (each learned from a user correction — apply without re-asking)
 

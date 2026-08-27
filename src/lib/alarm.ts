@@ -1,36 +1,53 @@
-// Sideline alarm: a double-beep WAV played through an <audio> element on a
-// loop until dismissed, vibration attempt (guarded — iOS Safari has no
-// navigator.vibrate), and a visual class hook (.pt-alarm on <html>) that
-// index.css turns into a screen flash. <audio> element playback (unlike
-// WebAudio) still sounds on iOS when the ringer switch is set to silent.
+// Sideline alarm: a two-tone double-beep WAV played through an <audio>
+// element on a loop until dismissed, vibration attempt (guarded — iOS Safari
+// has no navigator.vibrate), and a visual class hook (.pt-alarm on <html>)
+// plus theme-color flash. <audio> element playback (unlike WebAudio) still
+// sounds on iOS when the ringer switch is set to silent — WebAudio is gated
+// by the silent switch, so we never use it. Changing `src` on a primed
+// element drops the iOS unlock, so sun vs default are two separate elements
+// created once and never recreated / load()'d.
 
 let loop: ReturnType<typeof setInterval> | null = null;
-let audioEl: HTMLAudioElement | null = null;
+let defaultEl: HTMLAudioElement | null = null;
+let sunEl: HTMLAudioElement | null = null;
 
-// Builds a short double-beep (square-ish 880Hz, ~0.5s total) as a 16-bit PCM
-// WAV data URI, with quick attack/decay envelopes to avoid clicks.
-function buildBeepDataUri(): string {
-  const sampleRate = 8000;
-  const beepSec = 0.18;
-  const gapSec = 0.08;
-  const totalSec = beepSec * 2 + gapSec;
-  const totalSamples = Math.round(sampleRate * totalSec);
-  const freq = 880;
-  const attackSamples = Math.round(sampleRate * 0.01);
-  const releaseSamples = Math.round(sampleRate * 0.03);
-  const beepSamples = Math.round(sampleRate * beepSec);
-  const gapSamples = Math.round(sampleRate * gapSec);
+const SAMPLE_RATE = 8000;
+const BEEP_SEC = 0.22;
+const GAP_SEC = 0.1;
+const ATTACK_SEC = 0.01;
+const RELEASE_SEC = 0.04;
+const TONE_1_HZ = 880;
+const TONE_2_HZ = 1320;
+const DEFAULT_AMP = 0.55;
+const SUN_AMP = 0.72;
+const LOOP_MS = 1200;
+
+const ALARM_THEME = "#2563eb";
+const IDLE_THEME_SUN = "#ffffff";
+const IDLE_THEME = "#f3f5f8";
+
+// Builds a short double-beep (square-ish 880Hz then 1320Hz) as a 16-bit PCM
+// WAV data URI, with quick attack/release envelopes to avoid clicks.
+function buildBeepDataUri(amplitude: number): string {
+  const totalSec = BEEP_SEC * 2 + GAP_SEC;
+  const totalSamples = Math.round(SAMPLE_RATE * totalSec);
+  const freqs = [TONE_1_HZ, TONE_2_HZ];
+  const attackSamples = Math.round(SAMPLE_RATE * ATTACK_SEC);
+  const releaseSamples = Math.round(SAMPLE_RATE * RELEASE_SEC);
+  const beepSamples = Math.round(SAMPLE_RATE * BEEP_SEC);
+  const gapSamples = Math.round(SAMPLE_RATE * GAP_SEC);
 
   const samples = new Int16Array(totalSamples);
   for (let beep = 0; beep < 2; beep++) {
     const start = beep * (beepSamples + gapSamples);
+    const freq = freqs[beep];
     for (let i = 0; i < beepSamples; i++) {
-      const t = i / sampleRate;
+      const t = i / SAMPLE_RATE;
       const square = Math.sign(Math.sin(2 * Math.PI * freq * t));
       let env = 1;
       if (i < attackSamples) env = i / attackSamples;
       else if (i > beepSamples - releaseSamples) env = (beepSamples - i) / releaseSamples;
-      samples[start + i] = Math.round(square * env * 0.3 * 32767);
+      samples[start + i] = Math.round(square * env * amplitude * 32767);
     }
   }
   // Trailing gapSamples remain silent (Int16Array defaults to 0).
@@ -51,8 +68,8 @@ function buildBeepDataUri(): string {
   view.setUint32(16, 16, true);
   view.setUint16(20, 1, true); // PCM
   view.setUint16(22, 1, true); // mono
-  view.setUint32(24, sampleRate, true);
-  view.setUint32(28, sampleRate * bytesPerSample, true);
+  view.setUint32(24, SAMPLE_RATE, true);
+  view.setUint32(28, SAMPLE_RATE * bytesPerSample, true);
   view.setUint16(32, bytesPerSample, true);
   view.setUint16(34, 16, true);
   writeString(36, "data");
@@ -67,36 +84,88 @@ function buildBeepDataUri(): string {
   return `data:audio/wav;base64,${btoa(binary)}`;
 }
 
-function getAudioEl(): HTMLAudioElement {
-  if (!audioEl) {
-    audioEl = new Audio(buildBeepDataUri());
-    audioEl.preload = "auto";
+function makeEl(src: string): HTMLAudioElement {
+  const el = new Audio(src);
+  el.preload = "auto";
+  return el;
+}
+
+// Created once, never nulled, never load()'d — iOS unlock lives on the element.
+function ensureDefaultEl(): HTMLAudioElement {
+  if (!defaultEl) defaultEl = makeEl(buildBeepDataUri(DEFAULT_AMP));
+  return defaultEl;
+}
+
+function ensureSunEl(): HTMLAudioElement {
+  if (!sunEl) sunEl = makeEl(buildBeepDataUri(SUN_AMP));
+  return sunEl;
+}
+
+function chosenEl(): HTMLAudioElement {
+  const sun =
+    typeof document !== "undefined" && document.documentElement.classList.contains("pt-sun");
+  return sun ? ensureSunEl() : ensureDefaultEl();
+}
+
+function getOrCreateMeta(name: string): HTMLMetaElement {
+  let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
+  if (!el) {
+    el = document.createElement("meta");
+    el.setAttribute("name", name);
+    document.head.appendChild(el);
   }
-  return audioEl;
+  return el;
+}
+
+function setThemeColor(content: string): void {
+  getOrCreateMeta("theme-color").setAttribute("content", content);
+}
+
+function setStatusBarStyle(content: string): void {
+  getOrCreateMeta("apple-mobile-web-app-status-bar-style").setAttribute("content", content);
+}
+
+function hush(el: HTMLAudioElement | null): void {
+  if (!el) return;
+  try {
+    el.pause();
+    el.currentTime = 0;
+  } catch {
+    // pause/seek can throw if the element isn't ready; ignore
+  }
+}
+
+function prime(el: HTMLAudioElement): void {
+  el.muted = true;
+  const playPromise = el.play();
+  if (playPromise) {
+    playPromise
+      .then(() => {
+        el.muted = false;
+        // Alarm started while we were priming — don't pause the live beep.
+        if (loop !== null) return;
+        el.pause();
+        el.currentTime = 0;
+      })
+      .catch(() => {
+        el.muted = false;
+      });
+  } else {
+    el.muted = false;
+    if (loop !== null) return;
+    el.pause();
+    el.currentTime = 0;
+  }
 }
 
 // iOS requires a gesture-initiated play before <audio> will sound later —
-// prime it muted on the first tap so the alarm can actually play unattended.
+// prime BOTH clips muted on the first tap so the alarm can play unattended.
 export function unlockAudio(): void {
+  // Don't mute an in-progress alarm beep.
+  if (loop !== null) return;
   try {
-    const el = getAudioEl();
-    el.muted = true;
-    const playPromise = el.play();
-    if (playPromise) {
-      playPromise
-        .then(() => {
-          el.pause();
-          el.currentTime = 0;
-          el.muted = false;
-        })
-        .catch(() => {
-          el.muted = false;
-        });
-    } else {
-      el.pause();
-      el.currentTime = 0;
-      el.muted = false;
-    }
+    prime(ensureDefaultEl());
+    prime(ensureSunEl());
   } catch {
     // no <audio> support; flash/vibrate still work
   }
@@ -113,7 +182,7 @@ function buzz(): void {
 function beepTwice(): void {
   buzz();
   try {
-    const el = getAudioEl();
+    const el = chosenEl();
     el.currentTime = 0;
     void el.play();
   } catch {
@@ -124,8 +193,10 @@ function beepTwice(): void {
 export function startAlarm(): void {
   stopAlarm();
   document.documentElement.classList.add("pt-alarm");
+  setThemeColor(ALARM_THEME);
+  setStatusBarStyle("black");
   beepTwice();
-  loop = setInterval(beepTwice, 1100);
+  loop = setInterval(beepTwice, LOOP_MS);
 }
 
 export function stopAlarm(): void {
@@ -134,4 +205,9 @@ export function stopAlarm(): void {
     loop = null;
   }
   document.documentElement.classList.remove("pt-alarm");
+  hush(defaultEl);
+  hush(sunEl);
+  const sun = document.documentElement.classList.contains("pt-sun");
+  setThemeColor(sun ? IDLE_THEME_SUN : IDLE_THEME);
+  setStatusBarStyle("default");
 }
