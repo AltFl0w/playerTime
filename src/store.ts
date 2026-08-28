@@ -27,17 +27,6 @@ export interface Store {
 
 const STORAGE_KEY = "playertime:v1";
 
-export function uid(): string {
-  try {
-    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
-  } catch {
-    // fall through
-  }
-  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
-}
-
-// Brandon's real team — pre-loaded whenever the roster is empty so a fresh
-// install (or a full reset) starts game-ready instead of with an empty screen.
 export const TEAM_ROSTER: Player[] = [
   { id: "p-joey", name: "Joey" },
   { id: "p-joshua", name: "Joshua" },
@@ -48,12 +37,23 @@ export const TEAM_ROSTER: Player[] = [
   { id: "p-noah", name: "Noah" },
 ];
 
-function defaultRoster(): Player[] {
-  return TEAM_ROSTER.map((p) => ({ ...p }));
+export function uid(): string {
+  try {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) return crypto.randomUUID();
+  } catch {
+    // fall through
+  }
+  return `id-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
 export function emptyStore(): Store {
-  return { version: 1, roster: defaultRoster(), config: { ...DEFAULT_CONFIG }, game: null, sunMode: false };
+  return {
+    version: 1,
+    roster: TEAM_ROSTER.map((p) => ({ ...p })),
+    config: { ...DEFAULT_CONFIG },
+    game: null,
+    sunMode: false,
+  };
 }
 
 // Version-mismatched or corrupt data is discarded wholesale rather than
@@ -64,9 +64,17 @@ export function loadStore(): Store {
     if (!raw) return emptyStore();
     const parsed = JSON.parse(raw) as Partial<Store> | null;
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.roster)) return emptyStore();
+    const hasTeam = parsed.roster.some((p) => p && p.name === "Joey");
+    if (!hasTeam) {
+      return {
+        ...emptyStore(),
+        config: { ...DEFAULT_CONFIG, ...(parsed.config ?? {}) },
+        sunMode: parsed.sunMode === true,
+      };
+    }
     return {
       version: 1,
-      roster: parsed.roster.length > 0 ? parsed.roster : defaultRoster(),
+      roster: parsed.roster,
       config: { ...DEFAULT_CONFIG, ...(parsed.config ?? {}) },
       game: parsed.game ?? null,
       sunMode: parsed.sunMode === true,
