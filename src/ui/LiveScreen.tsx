@@ -1,12 +1,15 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { engine } from "../engine";
 import type { GameConfig, GameState, Player, PlayerTimeState } from "../types";
-import type { PendingSwap } from "../store";
 import { fmtClock } from "../lib/format";
-import { Avatar, Badge, SectionTitle, SunToggle, btnAccent, type BadgeTone } from "./bits";
-import { SwapSheet } from "./SwapSheet";
+import { SunToggle } from "./bits";
 import { ConfirmSheet } from "./ConfirmSheet";
-import { buildSwapChips } from "./swapCandidates";
+
+export interface LiveAlarm {
+  kind: "interval" | "forced";
+  outId: string | null;
+  inId: string | null;
+}
 
 interface Props {
   roster: Player[];
@@ -17,17 +20,15 @@ interface Props {
   quarter: number;
   atBreak: boolean;
   isFinalBreak: boolean;
-  pendingSwaps: PendingSwap[];
+  alarm: LiveAlarm | null;
+  onDismissAlarm: () => void;
   onPauseToggle: () => void;
   onEnd: () => void;
-  onSubOut: (id: string) => void;
-  onSubIn: (id: string) => void;
+  onApplyChange: (outIds: string[], inIds: string[]) => void;
   onMarkReady: (id: string) => void;
   onDecline: (id: string) => void;
   onSetAvailability: (id: string, available: boolean) => void;
-  onScheduleSwap: (outId: string, inId: string, delayMin: number) => void;
-  onCancelPending: (id: string) => void;
-  onFirePending: (id: string) => void;
+  onFixMistake: (wrongId: string, rightId: string) => void;
   canUndo: boolean;
   onUndo: () => void;
   sunMode: boolean;
@@ -36,62 +37,134 @@ interface Props {
 
 type Row = { p: Player; st: PlayerTimeState };
 
-function sortKey(row: Row, nextInId: string | null): number {
-  const { st, p } = row;
-  if (st.onField && st.availability === "available") return 0;
-  if (st.availability === "declined_wait") return 3;
-  if (st.availability === "inactive") return 4;
-  if (p.id === nextInId) return 1;
-  return 2;
+// Board rules (learned on the sideline, don't regress):
+// - Positions are fixed roster order. Nothing re-sorts or animates while the
+//   game runs; staging changes a chip's border/fill/pill instantly, in place.
+// - Tap = stage (field kid OFF, bench kid IN); tap again = un-stage. One
+//   button applies the whole line change. Long-press holds the rare actions.
+// - The countdown to the end of the quarter owns the header.
+
+// Long-press without breaking normal taps: fire at 450ms of stillness, then
+// swallow the click that follows pointer-up.
+function useLongPress(onLong: () => void) {
+  const timer = useRef<number | null>(null);
+  const fired = useRef(false);
+  return {
+    onPointerDown: () => {
+      fired.current = false;
+      timer.current = window.setTimeout(() => {
+        fired.current = true;
+        onLong();
+      }, 450);
+    },
+    onPointerUp: () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    onPointerLeave: () => {
+      if (timer.current) window.clearTimeout(timer.current);
+    },
+    onClickCapture: (e: React.SyntheticEvent) => {
+      if (fired.current) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
+    },
+    onContextMenu: (e: React.SyntheticEvent) => e.preventDefault(),
+  };
 }
 
-function statusOf(row: Row, nextInId: string | null): { label: string; tone: BadgeTone } {
-  const { st, p } = row;
-  if (st.availability === "inactive") return { label: "inactive", tone: "grey" };
-  if (st.availability === "declined_wait") return { label: "declined wait", tone: "red" };
-  if (st.onField) return { label: "on field", tone: "green" };
-  if (p.id === nextInId) return { label: "next up", tone: "amber" };
-  return { label: "waiting", tone: "outline" };
-}
-
-function stintFrac(st: PlayerTimeState, config: GameConfig): number {
-  return st.currentStintSec / Math.max(1, config.maxStintSec);
-}
-
-// Donut gauge around a kid's photo — stint progress toward the heat cap.
-// Ink arc normally; amber near cap; red pulsing at cap. Attention only.
-function KidGauge({
-  frac,
+function Chip({
   player,
+  staged,
+  stagedLabel,
+  time,
+  pill,
+  dim,
+  onTap,
+  onLong,
+  big,
 }: {
-  frac: number;
   player: Player;
+  staged: boolean;
+  stagedLabel: "OFF" | "IN";
+  time: React.ReactNode;
+  pill: string | null;
+  dim?: boolean;
+  onTap: () => void;
+  onLong: () => void;
+  big?: boolean;
 }) {
-  const clamped = Math.min(1, Math.max(0, frac));
-  const R = 33;
-  const C = 2 * Math.PI * R;
-  const color =
-    clamped >= 1 ? "#dc2626" : clamped >= 0.75 ? "#f59e0b" : "#1a1a1e";
+  const lp = useLongPress(onLong);
+  const stagedCls =
+    stagedLabel === "OFF"
+      ? "border-stagedout-line bg-stagedout-soft"
+      : "border-stagedin-line bg-stagedin-soft";
+  const nameCls = staged
+    ? stagedLabel === "OFF"
+      ? "text-stagedout"
+      : "text-stagedin"
+    : "text-ink";
   return (
-    <div className={`relative h-16 w-16 shrink-0 ${clamped >= 1 ? "animate-pulse" : ""}`}>
-      <svg viewBox="0 0 84 84" className="h-full w-full -rotate-90">
-        <circle cx="42" cy="42" r={R} fill="none" className="pt-gauge-track" stroke="#e7e4db" strokeWidth="5" />
-        {clamped > 0 && (
-          <circle
-            cx="42"
-            cy="42"
-            r={R}
-            fill="none"
-            className="pt-gauge-arc"
-            stroke={color}
-            strokeWidth="5"
-            strokeLinecap="round"
-            strokeDasharray={`${C * clamped} ${C}`}
-          />
-        )}
-      </svg>
-      <Avatar player={player} className="absolute inset-[7px] h-[50px] w-[50px]" />
-    </div>
+    <button
+      type="button"
+      {...lp}
+      onClick={onTap}
+      className={`relative flex flex-col items-start gap-[3px] rounded-xl border px-[13px] pb-[11px] pt-[13px] text-left active:scale-[0.98] ${
+        big ? "min-h-[98px]" : "min-h-[92px]"
+      } ${
+        staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+      } ${dim ? "opacity-55" : ""}`}
+    >
+      {staged ? (
+        <span
+          className={`absolute right-2.5 top-2.5 rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
+            stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
+          }`}
+        >
+          {stagedLabel}
+        </span>
+      ) : (
+        pill && (
+          <span className="absolute right-2.5 top-2.5 rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
+            {pill}
+          </span>
+        )
+      )}
+      <span
+        className={`font-semibold leading-[1.15] tracking-[-0.02em] ${
+          big ? "text-[17px]" : "text-[15.5px]"
+        } ${nameCls}`}
+      >
+        {player.name.split(" ")[0]}
+      </span>
+      <span className="mt-auto text-[12.5px] tabular-nums text-mutedink">{time}</span>
+    </button>
+  );
+}
+
+function SheetButton({
+  label,
+  tone = "plain",
+  onClick,
+}: {
+  label: string;
+  tone?: "plain" | "good" | "danger";
+  onClick: () => void;
+}) {
+  const cls =
+    tone === "good"
+      ? "bg-stagedin-soft text-stagedin"
+      : tone === "danger"
+        ? "bg-stagedout-soft text-stagedout"
+        : "bg-canvas text-ink";
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-[52px] rounded-[11px] text-[15px] font-semibold active:scale-[0.98] ${cls}`}
+    >
+      {label}
+    </button>
   );
 }
 
@@ -104,29 +177,24 @@ export function LiveScreen({
   quarter,
   atBreak,
   isFinalBreak,
-  pendingSwaps,
+  alarm,
+  onDismissAlarm,
   onPauseToggle,
   onEnd,
-  onSubOut,
-  onSubIn,
+  onApplyChange,
   onMarkReady,
   onDecline,
   onSetAvailability,
-  onScheduleSwap,
-  onCancelPending,
-  onFirePending,
+  onFixMistake,
   canUndo,
   onUndo,
   sunMode,
   onSunToggle,
 }: Props) {
-  const [view, setView] = useState<"field" | "list">("field");
-  // Swap sheet: pre-decided pair awaiting timing confirmation.
-  const [sheet, setSheet] = useState<{ outId: string | null; inId: string | null } | null>(null);
-  // Ready flow: which recovered kid we're scheduling back in, and which OUT
-  // candidate is currently selected (defaults to the engine's top pick).
-  const [pickOutFor, setPickOutFor] = useState<string | null>(null);
-  const [schedOutId, setSchedOutId] = useState<string | null>(null);
+  const [stagedOut, setStagedOut] = useState<string[]>([]);
+  const [stagedIn, setStagedIn] = useState<string[]>([]);
+  const [actionId, setActionId] = useState<string | null>(null);
+  const [fixFor, setFixFor] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
 
@@ -137,569 +205,409 @@ export function LiveScreen({
     if (st) rows.push({ p, st });
   }
 
-  const declinedKids = rows.filter((r) => r.st.availability === "declined_wait");
-  const nextInId = engine.suggestIn(state, config);
-  const sortedRows = [...rows].sort((a, b) => sortKey(a, nextInId) - sortKey(b, nextInId));
-
-  const onFieldRows = sortedRows.filter(
-    ({ st }) => st.onField && st.availability === "available",
+  const fieldRows = rows.filter(({ st }) => st.onField);
+  const benchRows = rows.filter(
+    ({ st }) => !st.onField && (st.availability === "available" || st.availability === "declined_wait"),
   );
-  const waitingRows = sortedRows.filter(
-    ({ st }) => !st.onField && st.availability === "available",
+  const awayRows = rows.filter(({ st }) => !st.onField && st.availability === "inactive");
+
+  const suggestOutId = engine.suggestOut(state, config);
+  const suggestInId = engine.suggestIn(state, config);
+
+  // An alarm pre-stages the engine's suggestion — but never stomps a change
+  // the coach already started building.
+  const alarmKey = alarm ? `${alarm.kind}:${alarm.outId}:${alarm.inId}` : null;
+  const stagedEmpty = stagedOut.length === 0 && stagedIn.length === 0;
+  const stagedEmptyRef = useRef(stagedEmpty);
+  stagedEmptyRef.current = stagedEmpty;
+  useEffect(() => {
+    if (!alarmKey || !alarm) return;
+    if (!stagedEmptyRef.current) return;
+    if (alarm.outId && state.players[alarm.outId]?.onField) setStagedOut([alarm.outId]);
+    if (alarm.inId && !state.players[alarm.inId]?.onField) setStagedIn([alarm.inId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [alarmKey]);
+
+  function toggleOut(id: string) {
+    setStagedOut((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+  function toggleIn(id: string) {
+    setStagedIn((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+  function clearStaged() {
+    setStagedOut([]);
+    setStagedIn([]);
+  }
+
+  const outN = stagedOut.length;
+  const inN = stagedIn.length;
+  const resulting = fieldRows.length - outN + inN;
+  const overCap = resulting > config.playersOnField;
+  const short = resulting < config.playersOnField;
+
+  function applyStaged() {
+    if (outN + inN === 0 || overCap) return;
+    // Staging a declined kid back in IS the ready signal — no extra step.
+    for (const id of stagedIn) {
+      if (state.players[id]?.availability === "declined_wait") onMarkReady(id);
+    }
+    onApplyChange(stagedOut, stagedIn);
+    clearStaged();
+    if (alarm) onDismissAlarm();
+  }
+
+  const quarterLenSec = Math.max(1, Math.round(config.gameLengthSec / Math.max(1, config.quarterCount)));
+  const intoQuarter = elapsedSec - (quarter - 1) * quarterLenSec;
+  const quarterLeft = Math.max(0, quarterLenSec - intoQuarter);
+  const nextAlarmIn = Math.max(
+    0,
+    (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec,
   );
 
-  const candidates =
-    pickOutFor !== null
-      ? engine.rankOutCandidates(state, config).filter((c) => state.players[c.playerId]?.onField)
-      : [];
-  const pickPlayer = pickOutFor ? byId.get(pickOutFor) ?? null : null;
-  const schedPlayer = schedOutId ? byId.get(schedOutId) ?? null : null;
-
-  const chips = buildSwapChips(state, config, roster);
-  const { outCandidates: sheetOutCandidates, inCandidates: sheetInCandidates, topOutId } = chips;
-  const fieldFull = onFieldRows.length >= config.playersOnField;
-  const inactiveRows = sortedRows.filter(({ st }) => st.availability === "inactive");
-
-  // Refusing from the sheet declines the kid (they drop into "Waiting to come
-  // back") and advances the IN slot to whoever's next owed, rather than
-  // leaving the sheet pointed at a kid who just said no.
-  function refuseSheetIn(id: string) {
-    onDecline(id);
-    const next = sheetInCandidates.find((c) => c.player.id !== id)?.player.id ?? null;
-    setSheet((s) => (s ? { ...s, inId: next } : s));
-  }
-
-  const subCountdown = fmtClock(
-    Math.max(0, (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec),
-  );
-
-  // MARK_READY fires only once a swap is actually confirmed/scheduled (see
-  // scheduleReadySwap) — not here — so cancelling this flow leaves the kid in
-  // declined_wait instead of silently marking them ready.
-  function startReadyFlow(id: string) {
-    const topOut = engine
-      .rankOutCandidates(state, config)
-      .find((c) => c.eligible && state.players[c.playerId]?.onField);
-    setPickOutFor(id);
-    setSchedOutId(topOut?.playerId ?? null);
-  }
-
-  function scheduleReadySwap(delayMin: number) {
-    if (!pickOutFor || !schedOutId) return;
-    onMarkReady(pickOutFor);
-    onScheduleSwap(schedOutId, pickOutFor, delayMin);
-    closeFlows();
-  }
-
-  function closeFlows() {
-    setPickOutFor(null);
-    setSchedOutId(null);
-    setSheet(null);
-  }
+  const actionRow = actionId ? rows.find((r) => r.p.id === actionId) ?? null : null;
+  const fixRow = fixFor ? rows.find((r) => r.p.id === fixFor) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-4">
-      {/* Header: clock + countdown + view toggle */}
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-xs font-bold uppercase tracking-widest text-neutral-400">clock</div>
-          <div className="text-6xl font-black leading-none tabular-nums">{fmtClock(elapsedSec)}</div>
-          <div className={`mt-1 text-sm font-bold tabular-nums ${clockRunning ? "text-[#2563eb]" : "text-amber-600"}`}>
-            {clockRunning ? `Q${quarter} · next sub ${subCountdown}` : atBreak ? `quarter ${quarter} over` : "PAUSED"}
-          </div>
+    <div className="flex flex-col gap-5">
+      {/* Header: countdown owns it; totals sit small on the right */}
+      <div className="-mx-4 flex items-end justify-between border-b border-hairline px-5 pb-4">
+        <div className="flex items-baseline gap-2.5">
+          <span className="text-[13px] font-semibold tracking-[0.02em] text-faintink">
+            Q{quarter}
+          </span>
+          <span className="text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums text-ink">
+            {atBreak || state.ended ? "0:00" : fmtClock(quarterLeft)}
+          </span>
+          <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
+            {clockRunning ? "LEFT" : atBreak ? "BREAK" : "PAUSED"}
+          </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <SunToggle on={sunMode} onToggle={onSunToggle} />
-          <div className="flex overflow-hidden rounded-[7px] bg-white ring-1 ring-hairline text-sm font-bold">
-          <button
-            type="button"
-            onClick={() => setView("field")}
-            className={view === "field" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
-          >
-            Field
-          </button>
-          <button
-            type="button"
-            onClick={() => setView("list")}
-            className={view === "list" ? "bg-[#1a1a1e] px-3 py-2 text-white" : "px-3 py-2 text-neutral-400"}
-          >
-            List
-          </button>
+        <div className="flex items-center gap-2.5">
+          <div className="text-right text-[12px] leading-[1.7] text-faintink">
+            <div>
+              game <span className="font-medium tabular-nums text-mutedink">{fmtClock(elapsedSec)}</span>
+            </div>
+            <div>
+              next sub{" "}
+              <span className="font-medium tabular-nums text-mutedink">
+                {clockRunning ? fmtClock(nextAlarmIn) : "—"}
+              </span>
+            </div>
           </div>
+          <SunToggle on={sunMode} onToggle={onSunToggle} />
         </div>
       </div>
 
-      {/* Quarter / water break */}
-      {atBreak && (
-        <section className="rounded-[7px] bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-          <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-            {isFinalBreak ? "full time" : `end of quarter ${quarter}`}
-          </div>
-          <div className="mt-0.5 text-2xl font-black">
-            {isFinalBreak ? "Great game, coach" : "Water break"}
-          </div>
-          <div className="mt-0.5 text-sm text-neutral-500">
-            clock + stint timers are frozen
-          </div>
-          {isFinalBreak ? (
-            <button
-              type="button"
-              onClick={onEnd}
-              className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] active:scale-[0.98]"
-            >
-              See report
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={onPauseToggle}
-              className="mt-3 w-full rounded-[7px] bg-[#2563eb] px-4 py-3 text-lg font-extrabold text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)] active:scale-[0.98]"
-            >
-              Start Q{quarter + 1}
-            </button>
-          )}
-        </section>
-      )}
-
-      {/* Pending swaps with countdown */}
-      {pendingSwaps.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <SectionTitle>Scheduled swaps</SectionTitle>
-          {pendingSwaps.map((ps) => {
-            const remain = ps.dueElapsedSec - elapsedSec;
-            const out = byId.get(ps.outPlayerId);
-            const inn = byId.get(ps.inPlayerId);
-            const ghost = (p: Player | undefined): Player => p ?? { id: "?", name: "?" };
-            const due = remain <= 0;
-            return (
-              <div
-                key={ps.id}
-                role={due ? "button" : undefined}
-                tabIndex={due ? 0 : undefined}
-                onClick={due ? () => onFirePending(ps.id) : undefined}
-                onKeyDown={
-                  due
-                    ? (e) => {
-                        if (e.key === "Enter" || e.key === " ") onFirePending(ps.id);
-                      }
-                    : undefined
-                }
-                className={`flex w-full items-center gap-2 rounded-[7px] px-2.5 py-2 text-left ring-1 ${
-                  due
-                    ? "animate-pulse bg-[#e8f0fe] ring-2 ring-[#2563eb]/40 active:scale-[0.98]"
-                    : "bg-white ring-hairline"
-                }`}
-              >
-                <Avatar player={ghost(out)} className="h-8 w-8" />
-                <span className="text-sm text-neutral-500">⇄</span>
-                <Avatar player={ghost(inn)} className="h-8 w-8" />
-                <div className="min-w-0 flex-1 truncate text-base font-bold">
-                  {out?.name ?? "?"} ⇄ {inn?.name ?? "?"}
-                </div>
-                <span
-                  className={`rounded-[7px] px-3 py-1 text-sm font-extrabold tabular-nums ${
-                    due ? "bg-[#2563eb] text-white" : "bg-neutral-100 text-[#2563eb]"
-                  }`}
-                >
-                  {due ? "NOW" : fmtClock(remain)}
-                </span>
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onCancelPending(ps.id);
-                  }}
-                  aria-label="Cancel scheduled swap"
-                  className="-mr-1 p-3 text-lg text-neutral-500"
-                >
-                  ✕
-                </button>
-              </div>
-            );
-          })}
-        </section>
-      )}
-
-      {/* Ready buttons for kids in declined_wait */}
-      {declinedKids.length > 0 && (
-        <section className="flex flex-col gap-2">
-          <SectionTitle>Waiting to come back</SectionTitle>
-          {declinedKids.map(({ p }) => (
-            <button
-              type="button"
-              key={p.id}
-              onClick={() => startReadyFlow(p.id)}
-              disabled={pickOutFor !== null}
-              className="flex items-center gap-2 rounded-[7px] bg-white px-2.5 py-2 text-left shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-red-200 disabled:opacity-40"
-            >
-              <Avatar player={p} className="h-9 w-9" />
-              <div className="min-w-0 flex-1 truncate text-base font-bold">{p.name.split(" ")[0]}</div>
-              <span className="rounded-[7px] bg-[#2563eb] px-3.5 py-1.5 text-xs font-extrabold uppercase text-white">Ready</span>
-            </button>
-          ))}
-        </section>
-      )}
-
-      {/* Ready flow — leads with the engine's top OUT pick as a one-tap swap;
-          the full candidate grid + timing options sit below as the fallback
-          for when the coach wants someone else or a delayed swap. */}
-      {pickOutFor !== null && pickPlayer && (
-        <section className="flex flex-col gap-3 rounded-[7px] bg-white p-4 ring-2 ring-[#2563eb]/30">
-          <SectionTitle>{pickPlayer.name} is ready</SectionTitle>
-
-          {schedPlayer ? (
-            <button type="button" onClick={() => scheduleReadySwap(0)} className={btnAccent}>
-              Swap now — pull {schedPlayer.name.split(" ")[0]}
-            </button>
-          ) : (
-            <p className="py-1 text-neutral-400">Nobody is on the field yet.</p>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-              or choose who comes out
+      {/* Alarm banner — beep + suggestion pre-staged; the clock stays visible */}
+      {alarm && (
+        <div className="pt-banner flex items-center gap-3 rounded-xl border border-hairline2 bg-card px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <span
+            className={`h-2 w-2 shrink-0 rounded-full ${
+              alarm.kind === "forced" ? "bg-stagedout" : "bg-ink"
+            }`}
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-[14px] font-semibold text-ink">
+              {alarm.kind === "forced" ? "Long stint — swap soon" : "Sub time"}
             </div>
-            <div className="grid grid-cols-2 gap-2">
-              {candidates.map((c) => {
-                const st = state.players[c.playerId];
-                const p = byId.get(c.playerId);
-                if (!st || !p) return null;
-                const ratioPct = Number.isFinite(st.ratio) ? `${Math.round(st.ratio * 100)}%` : "—";
-                const selected = c.playerId === schedOutId;
-                // Shield never blocks — a fresh kid is dimmed as a nudge but
-                // stays tappable. The coach outranks every suggestion.
-                return (
-                  <button
-                    type="button"
-                    key={c.playerId}
-                    onClick={() => setSchedOutId(c.playerId)}
-                    className={`flex items-center gap-2 rounded-[7px] px-2 py-2 text-left active:scale-[0.97] ${
-                      selected ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-[#f1f3f6]"
-                    } ${!c.eligible && !selected ? "opacity-60" : ""}`}
-                  >
-                    <Avatar player={p} className={`h-9 w-9 ${!c.eligible ? "grayscale" : ""}`} />
-                    <div className="min-w-0">
-                      <div className="truncate text-sm font-bold">{p.name.split(" ")[0]}</div>
-                      <div
-                        className={`text-[10px] font-bold uppercase ${c.eligible ? "text-[#2563eb]" : "text-neutral-400"}`}
-                      >
-                        {c.eligible ? ratioPct : "fresh"}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
+            <div className="text-[12px] text-mutedink">
+              suggestion staged — tap kids to change it
             </div>
           </div>
-
-          {schedPlayer && (
-            <div className="flex flex-col gap-1">
-              <div className="text-xs font-bold uppercase tracking-wider text-neutral-400">
-                or swap later
-              </div>
-              <div className="flex gap-2">
-                {[1, 2, 3, 5].map((mins) => (
-                  <button
-                    type="button"
-                    key={mins}
-                    onClick={() => scheduleReadySwap(mins)}
-                    className="min-h-[44px] flex-1 rounded-[7px] bg-neutral-100 px-2 py-2.5 text-sm font-bold text-[#1a1a1e] active:scale-[0.98]"
-                  >
-                    in {mins} min
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-
           <button
             type="button"
-            onClick={closeFlows}
-            className="min-h-[44px] py-2 text-sm font-bold text-neutral-400"
+            onClick={onDismissAlarm}
+            className="min-h-[44px] shrink-0 rounded-[10px] border border-hairline2 bg-card px-4 text-[13px] font-semibold text-mutedink active:scale-[0.98]"
           >
-            Cancel
+            Quiet
+          </button>
+        </div>
+      )}
+
+      {/* Break card */}
+      {atBreak && (
+        <section className="rounded-xl border border-hairline2 bg-card p-5 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
+            {isFinalBreak ? "full time" : `quarter ${quarter} done`}
+          </div>
+          <div className="mt-1 text-[22px] font-semibold tracking-[-0.02em] text-ink">
+            {isFinalBreak ? "Great game, coach" : "Water break"}
+          </div>
+          <button
+            type="button"
+            onClick={isFinalBreak ? onEnd : onPauseToggle}
+            className="mt-4 min-h-[52px] w-full rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99]"
+          >
+            {isFinalBreak ? "See report" : `Start Q${quarter + 1}`}
           </button>
         </section>
       )}
 
-      {/* FIELD VIEW — quick reference: who's on, how cooked, who's next */}
-      {view === "field" && (
-        <div className="flex flex-col gap-5 pt-1">
-          <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-            <div className="mb-3 flex items-center justify-between">
-              <h2 className="text-base font-extrabold">On field</h2>
-              {clockRunning ? (
-                <span className="rounded-[7px] bg-accenttint px-3 py-1 text-sm font-extrabold tabular-nums text-[#2563eb]">
-                  next sub {subCountdown}
-                </span>
-              ) : (
-                <span className="rounded-[7px] bg-amber-50 px-3 py-1 text-sm font-extrabold text-amber-700">
-                  paused
-                </span>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              {Array.from({ length: Math.max(config.playersOnField, onFieldRows.length) }).map((_, i) => {
-                const row = onFieldRows[i];
-                if (!row)
-                  return (
-                    <div
-                      key={`empty-${i}`}
-                      className="flex items-center gap-3 rounded-[7px] bg-[#f1f3f6] px-3 py-2"
-                    >
-                      <div className="flex h-[50px] w-[50px] items-center justify-center rounded-full border-2 border-dashed border-neutral-300 text-xl text-neutral-300">
-                        +
-                      </div>
-                      <span className="text-sm font-bold text-neutral-300">open</span>
-                    </div>
-                  );
-                const hot = stintFrac(row.st, config) >= 0.75;
-                return (
-                  <button
-                    type="button"
-                    key={row.p.id}
-                    onClick={() =>
-                      setSheet({ outId: row.p.id, inId: engine.suggestIn(state, config) })
-                    }
-                    className="flex items-center gap-3 rounded-[7px] bg-[#f1f3f6] px-3 py-2 text-left active:scale-[0.97]"
-                  >
-                    <KidGauge frac={stintFrac(row.st, config)} player={row.p} />
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-base font-extrabold leading-tight">
-                        {row.p.name.split(" ")[0]}
-                      </div>
-                      <div
-                        className={`text-[13px] font-bold leading-snug tabular-nums ${hot ? "text-amber-600" : "text-neutral-700"}`}
-                      >
-                        {fmtClock(row.st.currentStintSec)}
-                      </div>
-                      <div className="text-[11px] font-semibold leading-snug tabular-nums text-neutral-500">
-                        {fmtClock(row.st.playedSec)}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section>
-            <div className="mb-2 flex items-baseline justify-between">
-              <SectionTitle>Next up</SectionTitle>
-              <span className="text-xs text-neutral-400">tap to send in</span>
-            </div>
-            <div className="grid grid-cols-2 gap-2.5">
-              {waitingRows.map(({ p, st }) => {
-                const isNext = p.id === nextInId;
-                return (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() =>
-                      setSheet({ outId: topOutId, inId: p.id })
-                    }
-                    className={`flex items-center gap-2.5 rounded-[7px] py-1.5 pl-2.5 pr-4 active:scale-[0.97] ${
-                      isNext ? "bg-accenttint ring-2 ring-[#2563eb]/50" : "bg-white ring-1 ring-hairline"
-                    }`}
-                  >
-                    <Avatar player={p} className="h-10 w-10" />
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className={`truncate text-base font-bold leading-tight ${isNext ? "text-[#2563eb]" : "text-[#1a1a1e]"}`}>
-                        {p.name.split(" ")[0]}
-                      </div>
-                      <div className="text-[11px] font-semibold tabular-nums text-neutral-500">
-                        {fmtClock(st.playedSec)}
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          {inactiveRows.length > 0 && (
-            <section>
-              <div className="mb-2 flex items-baseline justify-between">
-                <SectionTitle>Not here</SectionTitle>
-                <span className="text-xs text-neutral-400">tap when they arrive</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2.5">
-                {inactiveRows.map(({ p }) => (
-                  <button
-                    type="button"
-                    key={p.id}
-                    onClick={() => onSetAvailability(p.id, true)}
-                    className="flex min-h-[44px] items-center gap-2.5 rounded-[7px] bg-white py-1.5 pl-2.5 pr-4 ring-1 ring-hairline active:scale-[0.97]"
-                  >
-                    <Avatar player={p} className="h-10 w-10 grayscale" />
-                    <div className="min-w-0 flex-1 text-left">
-                      <div className="truncate text-base font-bold leading-tight">{p.name.split(" ")[0]}</div>
-                      <div className="text-[11px] font-extrabold uppercase text-[#2563eb]">Arrived</div>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-          )}
-
-          <p className="pb-2 text-center text-xs text-neutral-500">
-            top: stint · bottom: total · tap a kid to pull them off
-          </p>
+      {/* ON FIELD — fixed 2×2 */}
+      <section>
+        <div className="mb-2 flex items-baseline justify-between px-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
+            On field
+          </span>
+          <span className="text-[12px] text-faintink">tap — comes off · hold — more</span>
         </div>
-      )}
-
-      {/* LIST VIEW — halftime management */}
-      {view === "list" && (
-        <section className="flex flex-col gap-2">
-          <SectionTitle>Squad</SectionTitle>
-          {sortedRows.map(({ p, st }) => {
-            const status = statusOf({ p, st }, nextInId);
-            const showStint = st.onField && st.availability === "available";
-            const frac = stintFrac(st, config);
-            return (
+        <div className="grid grid-cols-2 gap-2">
+          {fieldRows.map(({ p, st }) => (
+            <Chip
+              key={p.id}
+              player={p}
+              big
+              staged={stagedOut.includes(p.id)}
+              stagedLabel="OFF"
+              time={
+                <>
+                  {fmtClock(st.currentStintSec)}{" "}
+                  <span className="text-[10.5px] tracking-[0.02em] text-faintink">on</span> ·{" "}
+                  {fmtClock(st.playedSec)}{" "}
+                  <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
+                </>
+              }
+              pill={p.id === suggestOutId ? "longest on" : null}
+              onTap={() => toggleOut(p.id)}
+              onLong={() => setActionId(p.id)}
+            />
+          ))}
+          {fieldRows.length < config.playersOnField &&
+            Array.from({ length: config.playersOnField - fieldRows.length }).map((_, i) => (
               <div
-                key={p.id}
-                className={`rounded-[7px] bg-white p-3 shadow-[0_1px_3px_rgba(26,26,30,0.06)] ${st.availability === "inactive" ? "opacity-50" : ""}`}
+                key={`open-${i}`}
+                className="flex min-h-[98px] items-center justify-center rounded-xl border border-dashed border-hairline2 text-[13px] font-medium text-faintink"
               >
-                <div className="flex items-center gap-3">
-                  <Avatar player={p} className="h-14 w-14" />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-lg font-bold">
-                      {p.name}
-                      {p.number !== undefined && (
-                        <span className="ml-1.5 text-sm font-normal text-neutral-500">#{p.number}</span>
-                      )}
-                    </div>
-                    <div className="mt-0.5 text-sm tabular-nums text-neutral-500">
-                      {fmtClock(st.playedSec)} / {fmtClock(st.targetSec)} min
-                      {showStint && <> · stint {fmtClock(st.currentStintSec)}</>}
-                    </div>
-                  </div>
-                  <Badge tone={status.tone}>{status.label}</Badge>
-                </div>
-                {showStint && (
-                  <div className="pt-stint-bar mt-2 h-1.5 overflow-hidden rounded-full bg-hairline">
-                    <div
-                      className={`h-full rounded-full ${frac >= 1 ? "animate-pulse bg-red-500" : frac >= 0.75 ? "bg-amber-400" : "bg-green-600"}`}
-                      style={{ width: `${Math.min(100, frac * 100)}%` }}
-                    />
-                  </div>
-                )}
-                <div className="mt-2 flex justify-end gap-2">
-                  {st.availability === "available" && !st.onField && (
-                    <button
-                      type="button"
-                      onClick={() =>
-                        // Full field: route through the sheet so someone comes
-                        // off — direct sub-in would overfill past playersOnField.
-                        fieldFull ? setSheet({ outId: topOutId, inId: p.id }) : onSubIn(p.id)
-                      }
-                      className="rounded-lg bg-green-50 px-3 py-2 text-sm font-bold text-green-700 ring-1 ring-green-200"
-                    >
-                      Sub in now
-                    </button>
-                  )}
-                  {st.onField && (
-                    <button
-                      type="button"
-                      onClick={() => onSubOut(p.id)}
-                      className="rounded-lg bg-neutral-100 px-3 py-2 text-sm font-bold text-[#1a1a1e]"
-                    >
-                      Sub out
-                    </button>
-                  )}
-                  {st.availability === "available" && (
-                    <button
-                      type="button"
-                      onClick={() => setConfirmLeaveId(p.id)}
-                      className="min-h-[44px] rounded-lg px-3 py-2 text-sm font-bold text-neutral-500"
-                    >
-                      Leave game
-                    </button>
-                  )}
-                  {st.availability === "inactive" && (
-                    <button
-                      type="button"
-                      onClick={() => onSetAvailability(p.id, true)}
-                      className="rounded-lg bg-neutral-100 px-3 py-2 text-sm font-bold text-green-700"
-                    >
-                      Arrived — add to game
-                    </button>
-                  )}
-                </div>
+                open spot
               </div>
-            );
-          })}
+            ))}
+        </div>
+      </section>
+
+      {/* BENCH — fixed row */}
+      <section>
+        <div className="mb-2 flex items-baseline justify-between px-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
+            Bench
+          </span>
+          <span className="text-[12px] text-faintink">tap — goes in</span>
+        </div>
+        {benchRows.length === 0 ? (
+          <p className="px-0.5 text-[13px] text-faintink">Nobody on the bench.</p>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {benchRows.map(({ p, st }) => {
+              const declined = st.availability === "declined_wait";
+              return (
+                <Chip
+                  key={p.id}
+                  player={p}
+                  staged={stagedIn.includes(p.id)}
+                  stagedLabel="IN"
+                  time={
+                    <>
+                      {fmtClock(st.playedSec)}{" "}
+                      <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
+                    </>
+                  }
+                  pill={declined ? "sat out" : p.id === suggestInId ? "least played" : null}
+                  dim={declined}
+                  onTap={() => toggleIn(p.id)}
+                  onLong={() => setActionId(p.id)}
+                />
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* NOT HERE */}
+      {awayRows.length > 0 && (
+        <section>
+          <div className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
+            Not here — tap when they arrive
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {awayRows.map(({ p }) => (
+              <button
+                type="button"
+                key={p.id}
+                onClick={() => onSetAvailability(p.id, true)}
+                className="flex min-h-[52px] items-center justify-center rounded-xl border border-hairline bg-card text-[15px] font-semibold text-faintink active:scale-[0.98]"
+              >
+                {p.name.split(" ")[0]}
+              </button>
+            ))}
+          </div>
         </section>
       )}
 
-      {/* Once-per-game action — deliberately smaller and out of the thumb zone */}
       <button
         type="button"
         onClick={() => setConfirmEnd(true)}
-        className="min-h-[44px] w-full rounded-[7px] bg-red-50 px-4 py-3 text-sm font-bold text-red-700 ring-1 ring-red-200"
+        className="min-h-[44px] w-full rounded-[11px] text-[13px] font-semibold text-faintink"
       >
         End game
       </button>
 
-      {/* Thumb-zone control — the one button the coach reaches for most,
-          pinned within reach while running around */}
-      <div className="sticky bottom-0 bg-canvas pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-2">
-        <div className="flex gap-2">
-          {canUndo && (
+      {/* Dock: apply the staged change when one exists, otherwise pause/undo */}
+      <div className="sticky bottom-0 -mx-4 border-t border-hairline bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        {outN + inN > 0 ? (
+          <div className="flex gap-2">
             <button
               type="button"
-              onClick={onUndo}
-              className="min-h-[44px] min-w-[44px] shrink-0 rounded-[7px] bg-white px-4 py-4 text-base font-bold text-neutral-500 ring-1 ring-hairline active:scale-[0.98]"
+              onClick={clearStaged}
+              className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
             >
-              Undo
+              Clear
             </button>
-          )}
-          <button
-            type="button"
-            onClick={onPauseToggle}
-            className={`flex-1 rounded-[7px] px-4 py-4 text-lg font-extrabold transition active:scale-[0.98] ${
-              clockRunning
-                ? "bg-white text-[#1a1a1e] shadow-[0_2px_8px_rgba(26,26,30,0.18)] ring-1 ring-hairline"
-                : "bg-[#2563eb] text-white shadow-[0_2px_10px_rgba(37,99,235,0.35)]"
-            }`}
-          >
-            {clockRunning ? "Pause" : "Play"}
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={applyStaged}
+              disabled={overCap}
+              className="min-h-[52px] flex-1 rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99] disabled:border disabled:border-hairline disabled:bg-canvas disabled:text-faintink"
+            >
+              {overCap ? (
+                "Too many going in — pick who comes off"
+              ) : (
+                <>
+                  Make the change{" "}
+                  <span className="tabular-nums text-white/70">
+                    {outN} for {inN}
+                  </span>
+                  {short ? " — field goes short" : ""}
+                </>
+              )}
+            </button>
+          </div>
+        ) : (
+          <div className="flex gap-2">
+            {canUndo && (
+              <button
+                type="button"
+                onClick={onUndo}
+                className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
+              >
+                Undo
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={onPauseToggle}
+              className={`min-h-[52px] flex-1 rounded-[11px] text-[15px] font-semibold active:scale-[0.99] ${
+                clockRunning
+                  ? "border border-hairline2 bg-card text-ink"
+                  : "bg-ink text-white"
+              }`}
+            >
+              {clockRunning ? "Pause" : "Play"}
+            </button>
+          </div>
+        )}
       </div>
 
-      {/* Tap-a-kid swap confirmation */}
-      {sheet && (
-        <SwapSheet
-          outPlayer={sheet.outId ? byId.get(sheet.outId) ?? null : null}
-          inPlayer={sheet.inId ? byId.get(sheet.inId) ?? null : null}
-          outCandidates={sheetOutCandidates}
-          inCandidates={sheetInCandidates}
-          fieldFull={fieldFull}
-          onChangeOut={(id) => setSheet((s) => (s ? { ...s, outId: id } : s))}
-          onChangeIn={(id) => setSheet((s) => (s ? { ...s, inId: id } : s))}
-          onSwapNow={() => {
-            if (sheet.outId) onSubOut(sheet.outId);
-            if (sheet.inId) onSubIn(sheet.inId);
-            closeFlows();
-          }}
-          onSchedule={(m) => {
-            if (sheet.outId && sheet.inId) onScheduleSwap(sheet.outId, sheet.inId, m);
-            closeFlows();
-          }}
-          onRefuseIn={refuseSheetIn}
-          onCancel={closeFlows}
-          onLeaveOut={
-            sheet.outId
-              ? () => {
-                  const id = sheet.outId;
-                  closeFlows();
-                  if (id) setConfirmLeaveId(id);
-                }
-              : undefined
-          }
-        />
+      {/* Long-press actions */}
+      {actionRow && !fixFor && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/30" onClick={() => setActionId(null)}>
+          <div
+            className="w-full rounded-t-2xl border-t border-hairline bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 text-[17px] font-semibold tracking-[-0.02em]">
+              {actionRow.p.name.split(" ")[0]}
+            </div>
+            <div className="flex flex-col gap-2">
+              {actionRow.st.availability === "declined_wait" && (
+                <SheetButton
+                  label="Ready to play again"
+                  tone="good"
+                  onClick={() => {
+                    onMarkReady(actionRow.p.id);
+                    setActionId(null);
+                  }}
+                />
+              )}
+              {!actionRow.st.onField && actionRow.st.availability === "available" && (
+                <SheetButton
+                  label="Won't go in right now"
+                  onClick={() => {
+                    onDecline(actionRow.p.id);
+                    setStagedIn((s) => s.filter((x) => x !== actionRow.p.id));
+                    setActionId(null);
+                  }}
+                />
+              )}
+              {actionRow.st.onField && (
+                <SheetButton
+                  label="Wrong kid — someone else went in"
+                  onClick={() => {
+                    setFixFor(actionRow.p.id);
+                    setActionId(null);
+                  }}
+                />
+              )}
+              {actionRow.st.availability !== "inactive" && (
+                <SheetButton
+                  label="Leaves the game (hurt / going home)"
+                  tone="danger"
+                  onClick={() => {
+                    setConfirmLeaveId(actionRow.p.id);
+                    setActionId(null);
+                  }}
+                />
+              )}
+              <button
+                type="button"
+                onClick={() => setActionId(null)}
+                className="min-h-[44px] text-[13px] font-semibold text-faintink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mistake repair: reassign the current stint to who really went in */}
+      {fixRow && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/30" onClick={() => setFixFor(null)}>
+          <div
+            className="w-full rounded-t-2xl border-t border-hairline bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-1 text-[17px] font-semibold tracking-[-0.02em]">
+              Who actually went in instead of {fixRow.p.name.split(" ")[0]}?
+            </div>
+            <p className="mb-3 text-[13px] leading-snug text-mutedink">
+              The whole stint moves to the right kid — every number recomputes.
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {benchRows
+                .filter(({ st }) => st.availability === "available")
+                .map(({ p }) => (
+                  <button
+                    type="button"
+                    key={p.id}
+                    onClick={() => {
+                      onFixMistake(fixRow.p.id, p.id);
+                      setFixFor(null);
+                      clearStaged();
+                    }}
+                    className="min-h-[52px] rounded-[11px] border border-hairline2 bg-card text-[15px] font-semibold active:scale-[0.98]"
+                  >
+                    {p.name.split(" ")[0]}
+                  </button>
+                ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFixFor(null)}
+              className="mt-3 min-h-[44px] w-full text-[13px] font-semibold text-faintink"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       )}
 
       {confirmEnd && (
@@ -721,11 +629,13 @@ export function LiveScreen({
           confirmLabel="Leave game"
           danger
           onConfirm={() => {
-            // A hurt kid can leave straight from the field — one confirm does
-            // the sub-out and the leave; no two-step hunt mid-incident.
-            if (state.players[confirmLeaveId]?.onField) onSubOut(confirmLeaveId);
-            onSetAvailability(confirmLeaveId, false);
+            // One confirm covers on-field kids too: pull + mark gone together.
+            const goes = confirmLeaveId;
             setConfirmLeaveId(null);
+            setStagedOut((s) => s.filter((x) => x !== goes));
+            setStagedIn((s) => s.filter((x) => x !== goes));
+            if (state.players[goes]?.onField) onApplyChange([goes], []);
+            onSetAvailability(goes, false);
           }}
           onCancel={() => setConfirmLeaveId(null)}
         />

@@ -7,9 +7,7 @@ import {
   emptyStore,
   loadStore,
   saveStore,
-  uid,
   type GameRecord,
-  type PendingSwap,
   type Store,
 } from "./store";
 import { demoStore } from "./testing/demo";
@@ -19,25 +17,13 @@ import { useLiveHistoryTrap } from "./lib/historyTrap";
 import { formatUndone, lastUndoableSlice, undoLastCoachAction } from "./lib/undo";
 import { SetupScreen } from "./ui/SetupScreen";
 import { PreGameScreen } from "./ui/PreGameScreen";
-import { LiveScreen } from "./ui/LiveScreen";
+import { LiveScreen, type LiveAlarm } from "./ui/LiveScreen";
 import { ReportScreen } from "./ui/ReportScreen";
-import { SwapAlarmModal } from "./ui/SwapAlarmModal";
 import { Toast } from "./ui/Toast";
 import { A2HSNudge } from "./ui/A2HSNudge";
 import { btnPrimary } from "./ui/bits";
-import { buildSwapChips } from "./ui/swapCandidates";
 
 type Screen = "setup" | "pregame" | "live" | "report";
-
-interface ActiveAlarm {
-  kind: "interval" | "forced" | "pending";
-  pendingId?: string;
-  outId: PlayerId | null;
-  inId: PlayerId | null;
-  outDone: boolean;
-  // true once the IN kid was confirmed in OR refused
-  inDone: boolean;
-}
 
 const EMPTY_EVENTS: GameEvent[] = [];
 
@@ -56,7 +42,7 @@ export default function App() {
         : "pregame",
   );
   const [now, setNow] = useState(() => Date.now());
-  const [alarm, setAlarm] = useState<ActiveAlarm | null>(null);
+  const [alarm, setAlarm] = useState<LiveAlarm | null>(null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const intervalFiredRef = useRef<number>(
@@ -72,7 +58,6 @@ export default function App() {
     ),
   );
   const prevForcedRef = useRef(false);
-  const alertedPendingRef = useRef<Set<string>>(new Set());
   const alarmOpenRef = useRef(false);
 
   function showToast(text: string) {
@@ -209,6 +194,18 @@ export default function App() {
     setStore((s) => (s.game ? { ...s, game: fn(s.game) } : s));
   }
 
+  // Event stamps use fresh wall time, not the render-cached `now` — a stale
+  // tick (backgrounded tab, iOS timer suspension) must never date an event
+  // in the past, and the display snaps forward with it via setNow.
+  function currentElapsedSec(): number {
+    const t = Date.now();
+    setNow(t);
+    return (
+      baseState.elapsedSec +
+      (game?.runningSinceMs ? Math.max(0, Math.floor((t - game.runningSinceMs) / 1000)) : 0)
+    );
+  }
+
   function pushEvents(newEvents: GameEvent[]) {
     patchGame((g) => ({ ...g, events: [...g.events, ...newEvents] }));
   }
@@ -235,7 +232,6 @@ export default function App() {
     evts.push({ type: "START", atSec: 0 });
     intervalFiredRef.current = 0;
     prevForcedRef.current = false;
-    alertedPendingRef.current = new Set();
     stopAlarm();
     setAlarm(null);
     alarmOpenRef.current = false;
@@ -274,7 +270,9 @@ export default function App() {
     setScreen("pregame");
   }
 
-  // Alarm orchestration: priority pending-due > forced heat cap > interval.
+  // Alarm orchestration: forced heat cap outranks the interval alarm. Either
+  // way the alarm just beeps and pre-stages a suggestion on the board — the
+  // coach edits by tapping and applies at the whistle.
   useEffect(() => {
     const wasForced = prevForcedRef.current;
     const forcedNow = !!state.forcedSwap;
@@ -283,71 +281,30 @@ export default function App() {
     if (alarmOpenRef.current) return;
     prevForcedRef.current = forcedNow;
 
-    const due = game.pendingSwaps.find(
-      (ps) => ps.dueElapsedSec <= elapsedSec && !alertedPendingRef.current.has(ps.id),
-    );
-    if (due) {
-      alertedPendingRef.current.add(due.id);
-      openAlarm({
-        kind: "pending",
-        pendingId: due.id,
-        outId: due.outPlayerId,
-        inId: due.inPlayerId,
-        outDone: false,
-        inDone: false,
-      });
-      return;
-    }
-
     const idx = Math.floor(elapsedSec / Math.max(1, store.config.subIntervalSec));
     if (forcedNow && !wasForced) {
-      const chips = buildSwapChips(state, store.config, store.roster);
-      openAlarm({
-        kind: "forced",
-        outId: chips.topOutId,
-        inId: chips.topInId,
-        outDone: false,
-        inDone: false,
-      });
+      openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
     } else if (idx > intervalFiredRef.current) {
       intervalFiredRef.current = idx;
-      const chips = buildSwapChips(state, store.config, store.roster);
-      openAlarm({
-        kind: "interval",
-        outId: chips.topOutId,
-        inId: chips.topInId,
-        outDone: false,
-        inDone: false,
-      });
+      openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
     }
   }, [state, elapsedSec, screen, game, clockRunning, store.config]);
 
-  function openAlarm(a: ActiveAlarm) {
+  // Shield nudges but never blanks the suggestion: with everyone fresh
+  // (early game) fall back to the least-bad pull.
+  function topSuggestOut(): PlayerId | null {
+    const ranked = engine.rankOutCandidates(state, store.config);
+    return ranked.find((c) => c.eligible)?.playerId ?? ranked[0]?.playerId ?? null;
+  }
+
+  function topSuggestIn(): PlayerId | null {
+    return engine.rankInCandidates(state)[0]?.playerId ?? null;
+  }
+
+  function openAlarm(a: LiveAlarm) {
     alarmOpenRef.current = true;
     setAlarm(a);
     startAlarm();
-  }
-
-  function settleAlarm(patch: Partial<ActiveAlarm>) {
-    if (!alarm) return;
-    const next = { ...alarm, ...patch };
-    const outResolved = !next.outId || next.outDone;
-    const inResolved = !next.inId || next.inDone;
-    const fullyResolved = outResolved && inResolved;
-    if (fullyResolved) {
-      alarmOpenRef.current = false;
-      stopAlarm();
-      unlockAudio();
-      // A resolved scheduled swap is done — drop it so the tile stops pulsing "NOW".
-      if (alarm.kind === "pending" && alarm.pendingId) {
-        const pendingId = alarm.pendingId;
-        patchGame((g) => ({
-          ...g,
-          pendingSwaps: g.pendingSwaps.filter((ps) => ps.id !== pendingId),
-        }));
-      }
-    }
-    setAlarm(fullyResolved ? null : next);
   }
 
   function dismissAlarm() {
@@ -357,13 +314,38 @@ export default function App() {
     setAlarm(null);
   }
 
-  function retargetAlarm(side: "out" | "in", id: string) {
-    setAlarm((a) => {
-      if (!a) return a;
-      if (side === "out" && !a.outDone) return { ...a, outId: id };
-      if (side === "in" && !a.inDone) return { ...a, inId: id };
-      return a;
+  // One batch for a whole line change: all OUTs then all INs at this second.
+  function applyChange(outIds: PlayerId[], inIds: PlayerId[]) {
+    const at = currentElapsedSec();
+    const evts: GameEvent[] = [
+      ...outIds.map((playerId): GameEvent => ({ type: "SUB_OUT", atSec: at, playerId })),
+      ...inIds.map((playerId): GameEvent => ({ type: "SUB_IN", atSec: at, playerId })),
+    ];
+    if (evts.length === 0) return;
+    pushEvents(evts);
+    const n = outIds.length + inIds.length;
+    showToast(n === 1 ? "Done" : `Changed ${outIds.length}↔${inIds.length}`);
+  }
+
+  // "Wrong kid" repair: the tapped kid never actually went in — someone else
+  // did. Rewrite his most recent SUB_IN to the right kid; the engine replay
+  // moves the whole stint's minutes automatically.
+  function fixMistake(wrongId: PlayerId, rightId: PlayerId) {
+    patchGame((g) => {
+      const idx = [...g.events]
+        .map((e, i) => ({ e, i }))
+        .filter(({ e }) => e.type === "SUB_IN" && e.playerId === wrongId)
+        .map(({ i }) => i)
+        .pop();
+      if (idx === undefined) return g;
+      const events = g.events.map((e, i) =>
+        i === idx && e.type === "SUB_IN" ? { ...e, playerId: rightId } : e,
+      );
+      return { ...g, events };
     });
+    showToast(
+      `Fixed — that was ${byId.get(rightId)?.name.split(" ")[0] ?? "them"}, not ${byId.get(wrongId)?.name.split(" ")[0] ?? ""}`,
+    );
   }
 
   function undoLast() {
@@ -378,63 +360,7 @@ export default function App() {
     setStore((s) => ({ ...s, sunMode: !s.sunMode }));
   }
 
-  function confirmOut() {
-    if (!alarm?.outId || alarm.outDone) return;
-    pushEvents([{ type: "SUB_OUT", atSec: elapsedSec, playerId: alarm.outId }]);
-    settleAlarm({ outDone: true });
-    showToast(`${byId.get(alarm.outId)?.name.split(" ")[0] ?? "Player"} off`);
-  }
-
-  function confirmIn() {
-    if (!alarm?.inId || alarm.inDone) return;
-    pushEvents([{ type: "SUB_IN", atSec: elapsedSec, playerId: alarm.inId }]);
-    settleAlarm({ inDone: true });
-    showToast(`${byId.get(alarm.inId)?.name.split(" ")[0] ?? "Player"} on`);
-  }
-
-  // One-tap "Swapped!": both sides settle in a single call — two sequential
-  // settleAlarm calls would each read the same stale `alarm` and clobber
-  // the other's done flag.
-  function confirmBoth() {
-    if (!alarm) return;
-    const evts: GameEvent[] = [];
-    if (alarm.outId && !alarm.outDone)
-      evts.push({ type: "SUB_OUT", atSec: elapsedSec, playerId: alarm.outId });
-    if (alarm.inId && !alarm.inDone)
-      evts.push({ type: "SUB_IN", atSec: elapsedSec, playerId: alarm.inId });
-    if (evts.length === 0) return;
-    pushEvents(evts);
-    settleAlarm({ outDone: true, inDone: true });
-    showToast("Swapped");
-  }
-
-  function refuseIn() {
-    if (!alarm?.inId || alarm.inDone) return;
-    pushEvents([{ type: "DECLINE", atSec: elapsedSec, playerId: alarm.inId }]);
-    settleAlarm({ inDone: true });
-    showToast(`${byId.get(alarm.inId)?.name.split(" ")[0] ?? "Player"} skipped`);
-  }
-
   const byId = useMemo(() => new Map(store.roster.map((p) => [p.id, p])), [store.roster]);
-  const swapChips = useMemo(
-    () => buildSwapChips(state, store.config, store.roster),
-    [state, store.config, store.roster],
-  );
-  const alarmOutPlayer = alarm?.outId ? byId.get(alarm.outId) ?? null : null;
-  const alarmInPlayer = alarm?.inId ? byId.get(alarm.inId) ?? null : null;
-
-  const alarmTitle =
-    alarm?.kind === "forced"
-      ? "FORCED SWAP"
-      : alarm?.kind === "pending"
-        ? "Scheduled swap"
-        : "SUB TIME";
-  const alarmSubtitle =
-    alarm?.kind === "forced"
-      ? "heat cap reached — this sub can't wait"
-      : alarm?.kind === "pending"
-        ? "the swap you scheduled is up"
-        : `every ${Math.round(store.config.subIntervalSec / 60)} min rotation`;
 
   return (
     <div className={ROOT_CLASSES}>
@@ -468,8 +394,7 @@ export default function App() {
             alarmOpenRef.current = false;
             intervalFiredRef.current = 0;
             prevForcedRef.current = false;
-            alertedPendingRef.current = new Set();
-            setStore(emptyStore());
+                    setStore(emptyStore());
             setScreen("setup");
           }}
         />
@@ -505,56 +430,23 @@ export default function App() {
             quarter={quarter}
             atBreak={atBreak}
             isFinalBreak={isFinalBreak}
-            pendingSwaps={game.pendingSwaps}
+            alarm={alarm}
+            onDismissAlarm={dismissAlarm}
             onPauseToggle={pauseToggle}
             onEnd={endGame}
-            onSubOut={(id) => pushEvents([{ type: "SUB_OUT", atSec: elapsedSec, playerId: id }])}
-            onSubIn={(id) => pushEvents([{ type: "SUB_IN", atSec: elapsedSec, playerId: id }])}
+            onApplyChange={applyChange}
             onMarkReady={(id) =>
-              pushEvents([{ type: "MARK_READY", atSec: elapsedSec, playerId: id }])
+              pushEvents([{ type: "MARK_READY", atSec: currentElapsedSec(), playerId: id }])
             }
-            onDecline={(id) => pushEvents([{ type: "DECLINE", atSec: elapsedSec, playerId: id }])}
+            onDecline={(id) =>
+              pushEvents([{ type: "DECLINE", atSec: currentElapsedSec(), playerId: id }])
+            }
             onSetAvailability={(id, available) =>
               pushEvents([
-                { type: "SET_AVAILABILITY", atSec: elapsedSec, playerId: id, available },
+                { type: "SET_AVAILABILITY", atSec: currentElapsedSec(), playerId: id, available },
               ])
             }
-            onScheduleSwap={(outId, inId, delayMin) =>
-              patchGame((g) => ({
-                ...g,
-                pendingSwaps: [
-                  ...g.pendingSwaps,
-                  {
-                    id: uid(),
-                    outPlayerId: outId,
-                    inPlayerId: inId,
-                    dueElapsedSec: elapsedSec + delayMin * 60,
-                  } satisfies PendingSwap,
-                ],
-              }))
-            }
-            onCancelPending={(id) =>
-              patchGame((g) => ({
-                ...g,
-                pendingSwaps: g.pendingSwaps.filter((ps) => ps.id !== id),
-              }))
-            }
-            onFirePending={(id) => {
-              // Re-open the alarm for a dead "NOW" row — dismissing the
-              // original alarm left it due but unreachable otherwise.
-              if (alarmOpenRef.current) return;
-              const ps = game.pendingSwaps.find((p) => p.id === id);
-              if (!ps) return;
-              alertedPendingRef.current.add(ps.id);
-              openAlarm({
-                kind: "pending",
-                pendingId: ps.id,
-                outId: ps.outPlayerId,
-                inId: ps.inPlayerId,
-                outDone: false,
-                inDone: false,
-              });
-            }}
+            onFixMistake={fixMistake}
             canUndo={!alarm && lastUndoableSlice(events) !== null}
             onUndo={undoLast}
             sunMode={store.sunMode}
@@ -583,26 +475,6 @@ export default function App() {
           <button type="button" onClick={() => setScreen("pregame")} className={`${btnPrimary} w-auto px-8`}>
             Go to pre-game
           </button>        </div>
-      )}
-
-      {alarm && screen === "live" && (
-        <SwapAlarmModal
-          title={alarmTitle}
-          subtitle={alarmSubtitle}
-          outPlayer={alarmOutPlayer}
-          inPlayer={alarmInPlayer}
-          outDone={alarm.outDone}
-          inDone={alarm.inDone}
-          onConfirmOut={confirmOut}
-          onConfirmBoth={confirmBoth}
-          onConfirmIn={confirmIn}
-          onRefuseIn={refuseIn}
-          onDismiss={dismissAlarm}
-          outCandidates={swapChips.outCandidates}
-          inCandidates={swapChips.inCandidates}
-          onChangeOut={(id) => retargetAlarm("out", id)}
-          onChangeIn={(id) => retargetAlarm("in", id)}
-        />
       )}
 
       <Toast toast={toast} />

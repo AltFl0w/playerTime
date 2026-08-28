@@ -37,9 +37,18 @@ export function lastUndoableSlice(events: GameEvent[]): { start: number; end: nu
   const prevIdx = end - 1;
   const prev = prevIdx > startIdx ? events[prevIdx] : undefined;
 
-  // One sideline swap is two taps the coach thinks of as a single action.
-  if (last.type === "SUB_IN" && prev?.type === "SUB_OUT" && prev.atSec === last.atSec) {
-    return { start: prevIdx, end };
+  // A line change is one coach action however many kids it moved: undo the
+  // whole contiguous run of SUB_IN/SUB_OUT events sharing this atSec.
+  if (last.type === "SUB_IN" || last.type === "SUB_OUT") {
+    let start = end;
+    while (
+      start - 1 > startIdx &&
+      (events[start - 1].type === "SUB_IN" || events[start - 1].type === "SUB_OUT") &&
+      events[start - 1].atSec === last.atSec
+    ) {
+      start -= 1;
+    }
+    return { start, end };
   }
 
   // Pulling a kid off the field and marking them gone is one "left" gesture.
@@ -82,6 +91,9 @@ export function undoLastCoachAction(
 }
 
 export function formatUndone(undone: GameEvent[], nameOf: (id: string) => string): string {
+  if (undone.length > 2 && undone.every((e) => e.type === "SUB_IN" || e.type === "SUB_OUT")) {
+    return "Undid line change";
+  }
   if (undone.length === 2) {
     const types = new Set(undone.map((e) => e.type));
     if (types.has("SUB_OUT") && types.has("SUB_IN")) return "Undid swap";

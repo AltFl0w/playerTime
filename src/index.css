@@ -1,60 +1,37 @@
 @import "tailwindcss";
 
 @theme {
-  --color-canvas: #f3f5f8;
+  --color-canvas: #fafafa;
   --color-card: #ffffff;
-  --color-hairline: #e7eaef;
-  --color-ink: #1a1a1e;
-  --color-mutedink: #8b8a85;
-  --color-accent: #2563eb;
-  --color-accenttint: #e8f0fe;
+  --color-hairline: #ebebeb;
+  --color-hairline2: #e0e0e0;
+  --color-ink: #171717;
+  --color-mutedink: #6f6f6f;
+  --color-faintink: #a3a3a3;
+  --color-accent: #171717;
+  --color-accenttint: #f5f5f5;
+  --color-stagedout: #e5484d;
+  --color-stagedout-soft: #fff0f0;
+  --color-stagedout-line: #f4c1c3;
+  --color-stagedin: #299764;
+  --color-stagedin-soft: #effaf4;
+  --color-stagedin-line: #bce5d0;
 }
 
 @layer base {
+  html {
+    letter-spacing: -0.011em;
+    -webkit-font-smoothing: antialiased;
+  }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
   }
 }
 
-/* Alarm screen-flash — attention purpose only (fires with the swap alarm) */
-@keyframes ptFlash {
-  0%,
-  100% {
-    background-color: #f3f5f8;
-  }
-  50% {
-    background-color: #93c5fd;
-  }
-}
-
-@keyframes ptFlashSun {
-  0%,
-  100% {
-    background-color: #ffffff;
-  }
-  50% {
-    background-color: #93c5fd;
-  }
-}
-
-.pt-alarm {
-  animation: ptFlash 0.6s ease-in-out infinite;
-}
-
-html.pt-alarm,
-html.pt-alarm .pt-app,
-html.pt-alarm .pt-alarm-modal {
-  animation: ptFlash 0.6s ease-in-out infinite;
-}
-
-html.pt-sun.pt-alarm,
-html.pt-sun.pt-alarm .pt-app,
-html.pt-sun.pt-alarm .pt-alarm-modal {
-  animation: ptFlashSun 0.45s steps(2, jump-none) infinite;
-}
-
-/* Toast: quick drop-in, no loop, never blocks input */
+/* Toast: quick drop-in, no loop, never blocks input. The one entrance
+   animation the app allows itself besides the alarm banner — everything the
+   coach taps repeatedly changes state instantly. */
 @keyframes ptToast {
   from {
     opacity: 0;
@@ -71,19 +48,47 @@ html.pt-sun.pt-alarm .pt-alarm-modal {
   animation: ptToast 0.18s ease-out;
 }
 
+/* Alarm banner slides in once per alarm (~6×/game) — rare enough to move. */
+@keyframes ptBanner {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.pt-banner {
+  animation: ptBanner 0.16s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pt-toast,
+  .pt-banner {
+    animation: none;
+  }
+}
+
 /* Kill iOS pull-to-refresh / rubber-band while a live game is on screen */
 .pt-live {
   overscroll-behavior: none;
 }
 
+/* Sun mode: same design, harder contrast for direct sunlight */
 html.pt-sun {
   --color-canvas: #ffffff;
   --color-card: #ffffff;
-  --color-hairline: #c5cad3;
-  --color-ink: #0a0a0c;
-  --color-mutedink: #3f3f46;
-  --color-accent: #2563eb;
-  --color-accenttint: #dbeafe;
+  --color-hairline: #c9c9c9;
+  --color-hairline2: #a8a8a8;
+  --color-ink: #000000;
+  --color-mutedink: #333333;
+  --color-faintink: #4d4d4d;
+  --color-stagedout-soft: #ffe3e3;
+  --color-stagedout-line: #e5484d;
+  --color-stagedin-soft: #dcf3e7;
+  --color-stagedin-line: #299764;
 }
 
 html.pt-sun .text-neutral-400 {
@@ -94,15 +99,4 @@ html.pt-sun .text-neutral-500 {
 }
 html.pt-sun .text-neutral-300 {
   color: #52525b;
-}
-
-html.pt-sun .pt-gauge-track {
-  stroke: #c5cad3;
-  stroke-width: 8;
-}
-html.pt-sun .pt-gauge-arc {
-  stroke-width: 8;
-}
-html.pt-sun .pt-stint-bar {
-  height: 0.625rem;
 }

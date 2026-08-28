@@ -1,6 +1,6 @@
 // Sideline alarm: a two-tone double-beep WAV played through an <audio>
 // element on a loop until dismissed, vibration attempt (guarded — iOS Safari
-// has no navigator.vibrate), and a visual class hook (.pt-alarm on <html>)
+// has no navigator.vibrate). No screen flash — the alarm banner is the visual.
 // plus theme-color flash. <audio> element playback (unlike WebAudio) still
 // sounds on iOS when the ringer switch is set to silent — WebAudio is gated
 // by the silent switch, so we never use it. Changing `src` on a primed
@@ -22,9 +22,9 @@ const DEFAULT_AMP = 0.55;
 const SUN_AMP = 0.72;
 const LOOP_MS = 1200;
 
-const ALARM_THEME = "#2563eb";
+const ALARM_THEME = "#171717";
 const IDLE_THEME_SUN = "#ffffff";
-const IDLE_THEME = "#f3f5f8";
+const IDLE_THEME = "#fafafa";
 
 // Builds a short double-beep (square-ish 880Hz then 1320Hz) as a 16-bit PCM
 // WAV data URI, with quick attack/release envelopes to avoid clicks.
@@ -186,13 +186,12 @@ function beepTwice(): void {
     el.currentTime = 0;
     void el.play();
   } catch {
-    // playback can throw/reject if not yet unlocked; alarm still flashes
+    // playback can throw/reject if not yet unlocked; banner still shows
   }
 }
 
 export function startAlarm(): void {
   stopAlarm();
-  document.documentElement.classList.add("pt-alarm");
   setThemeColor(ALARM_THEME);
   setStatusBarStyle("black");
   beepTwice();
@@ -204,7 +203,6 @@ export function stopAlarm(): void {
     clearInterval(loop);
     loop = null;
   }
-  document.documentElement.classList.remove("pt-alarm");
   hush(defaultEl);
   hush(sunEl);
   const sun = document.documentElement.classList.contains("pt-sun");
