@@ -317,7 +317,11 @@ export default function App() {
   // One batch for a whole line change: all OUTs then all INs at this second.
   function applyChange(outIds: PlayerId[], inIds: PlayerId[]) {
     const at = currentElapsedSec();
+    // Sending a declined kid in IS the ready signal. Everything one gesture
+    // produces shares one atSec and one push, so Undo reverts it as a unit.
+    const readies = inIds.filter((id) => state.players[id]?.availability === "declined_wait");
     const evts: GameEvent[] = [
+      ...readies.map((playerId): GameEvent => ({ type: "MARK_READY", atSec: at, playerId })),
       ...outIds.map((playerId): GameEvent => ({ type: "SUB_OUT", atSec: at, playerId })),
       ...inIds.map((playerId): GameEvent => ({ type: "SUB_IN", atSec: at, playerId })),
     ];
@@ -325,6 +329,17 @@ export default function App() {
     pushEvents(evts);
     const n = outIds.length + inIds.length;
     showToast(n === 1 ? "Done" : `Changed ${outIds.length}↔${inIds.length}`);
+  }
+
+  // "Hurt / going home": pull from the field (if on it) and mark gone in one
+  // batch at one atSec — Undo restores both together.
+  function leaveGame(id: PlayerId) {
+    const at = currentElapsedSec();
+    const evts: GameEvent[] = [];
+    if (state.players[id]?.onField) evts.push({ type: "SUB_OUT", atSec: at, playerId: id });
+    evts.push({ type: "SET_AVAILABILITY", atSec: at, playerId: id, available: false });
+    pushEvents(evts);
+    showToast(`${byId.get(id)?.name.split(" ")[0] ?? "Player"} out of the game`);
   }
 
   // "Wrong kid" repair: the tapped kid never actually went in — someone else
@@ -446,6 +461,7 @@ export default function App() {
                 { type: "SET_AVAILABILITY", atSec: currentElapsedSec(), playerId: id, available },
               ])
             }
+            onLeaveGame={leaveGame}
             onFixMistake={fixMistake}
             canUndo={!alarm && lastUndoableSlice(events) !== null}
             onUndo={undoLast}

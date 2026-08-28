@@ -38,7 +38,9 @@ export function lastUndoableSlice(events: GameEvent[]): { start: number; end: nu
   const prev = prevIdx > startIdx ? events[prevIdx] : undefined;
 
   // A line change is one coach action however many kids it moved: undo the
-  // whole contiguous run of SUB_IN/SUB_OUT events sharing this atSec.
+  // whole contiguous run of SUB_IN/SUB_OUT events sharing this atSec, plus
+  // the MARK_READY events the same apply emitted for declined kids it sent
+  // in — otherwise undo would strand them looking ordinary-available.
   if (last.type === "SUB_IN" || last.type === "SUB_OUT") {
     let start = end;
     while (
@@ -47,6 +49,24 @@ export function lastUndoableSlice(events: GameEvent[]): { start: number; end: nu
       events[start - 1].atSec === last.atSec
     ) {
       start -= 1;
+    }
+    const inIds = new Set(
+      events
+        .slice(start, end + 1)
+        .filter((e) => e.type === "SUB_IN")
+        .map((e) => playerIdOf(e)),
+    );
+    while (start - 1 > startIdx) {
+      const prevEvent = events[start - 1];
+      if (
+        prevEvent.type === "MARK_READY" &&
+        prevEvent.atSec === last.atSec &&
+        inIds.has(prevEvent.playerId)
+      ) {
+        start -= 1;
+      } else {
+        break;
+      }
     }
     return { start, end };
   }
@@ -91,7 +111,12 @@ export function undoLastCoachAction(
 }
 
 export function formatUndone(undone: GameEvent[], nameOf: (id: string) => string): string {
-  if (undone.length > 2 && undone.every((e) => e.type === "SUB_IN" || e.type === "SUB_OUT")) {
+  if (
+    undone.length > 2 &&
+    undone.every(
+      (e) => e.type === "SUB_IN" || e.type === "SUB_OUT" || e.type === "MARK_READY",
+    )
+  ) {
     return "Undid line change";
   }
   if (undone.length === 2) {

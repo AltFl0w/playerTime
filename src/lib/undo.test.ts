@@ -132,6 +132,62 @@ describe("lastUndoableSlice / undoLastCoachAction", () => {
   });
 });
 
+  it("line change batch (2 out, 2 in, same atSec) undone as one unit", () => {
+    const events = [
+      ev.start(0),
+      ...starters(),
+      ev.subOut("a", 300),
+      ev.subOut("b", 300),
+      ev.subIn("e", 300),
+      ev.subIn("f", 300),
+    ];
+    const slice = lastUndoableSlice(events);
+    expect(slice).toEqual({ start: 5, end: 8 });
+  });
+
+  it("MARK_READY emitted by the same apply is undone with its line change", () => {
+    // f declined earlier; coach stages him in and applies: the batch is
+    // MARK_READY(f), SUB_OUT(a), SUB_IN(f) at one atSec. Undo must revert
+    // all three so f drops back to declined_wait.
+    const events = [
+      ev.setAvail("a", 0, true),
+      ev.setAvail("b", 0, true),
+      ev.setAvail("c", 0, true),
+      ev.setAvail("d", 0, true),
+      ev.setAvail("f", 0, true),
+      ...starters(),
+      ev.start(0),
+      ev.decline("f", 200),
+      ev.ready("f", 400),
+      ev.subOut("a", 400),
+      ev.subIn("f", 400),
+    ];
+    const result = undoLastCoachAction(rec(events));
+    expect(result).not.toBeNull();
+    expect(result!.undone.map((e) => e.type)).toEqual(["MARK_READY", "SUB_OUT", "SUB_IN"]);
+    const state = engine.computeState(
+      [...result!.game.events, ev.pause(500)],
+      cfg(),
+      kids("a", "b", "c", "d", "f"),
+    );
+    expect(state.players.f.availability).toBe("declined_wait");
+    expect(state.players.a.onField).toBe(true);
+  });
+
+  it("earlier standalone MARK_READY at a different second is NOT swallowed", () => {
+    const events = [
+      ev.setAvail("f", 0, true),
+      ...starters(),
+      ev.start(0),
+      ev.decline("f", 200),
+      ev.ready("f", 350),
+      ev.subOut("a", 400),
+      ev.subIn("f", 400),
+    ];
+    const result = undoLastCoachAction(rec(events));
+    expect(result!.undone.map((e) => e.type)).toEqual(["SUB_OUT", "SUB_IN"]);
+  });
+
 describe("formatUndone", () => {
   it("labels swap, leave, and single taps; empty nameOf → Player", () => {
     expect(formatUndone([ev.subOut("a", 1), ev.subIn("e", 1)], names)).toBe("Undid swap");

@@ -28,6 +28,7 @@ interface Props {
   onMarkReady: (id: string) => void;
   onDecline: (id: string) => void;
   onSetAvailability: (id: string, available: boolean) => void;
+  onLeaveGame: (id: string) => void;
   onFixMistake: (wrongId: string, rightId: string) => void;
   canUndo: boolean;
   onUndo: () => void;
@@ -185,6 +186,7 @@ export function LiveScreen({
   onMarkReady,
   onDecline,
   onSetAvailability,
+  onLeaveGame,
   onFixMistake,
   canUndo,
   onUndo,
@@ -247,10 +249,6 @@ export function LiveScreen({
 
   function applyStaged() {
     if (outN + inN === 0 || overCap) return;
-    // Staging a declined kid back in IS the ready signal — no extra step.
-    for (const id of stagedIn) {
-      if (state.players[id]?.availability === "declined_wait") onMarkReady(id);
-    }
     onApplyChange(stagedOut, stagedIn);
     clearStaged();
     if (alarm) onDismissAlarm();
@@ -634,8 +632,7 @@ export function LiveScreen({
             setConfirmLeaveId(null);
             setStagedOut((s) => s.filter((x) => x !== goes));
             setStagedIn((s) => s.filter((x) => x !== goes));
-            if (state.players[goes]?.onField) onApplyChange([goes], []);
-            onSetAvailability(goes, false);
+            onLeaveGame(goes);
           }}
           onCancel={() => setConfirmLeaveId(null)}
         />
