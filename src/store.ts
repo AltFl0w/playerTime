@@ -64,7 +64,9 @@ export function loadStore(): Store {
     if (!raw) return emptyStore();
     const parsed = JSON.parse(raw) as Partial<Store> | null;
     if (!parsed || parsed.version !== 1 || !Array.isArray(parsed.roster)) return emptyStore();
-    const hasTeam = parsed.roster.some((p) => p && p.name === "Joey");
+    // Recognize the real team by our stable seeded ids, not by a kid's name —
+    // renaming a kid must never look like test data and wipe the roster.
+    const hasTeam = parsed.roster.some((p) => p && typeof p.id === "string" && p.id.startsWith("p-"));
     if (!hasTeam) {
       return {
         ...emptyStore(),

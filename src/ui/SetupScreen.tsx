@@ -18,6 +18,9 @@ const inputCls =
 
 export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEraseAll }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
+  // The form is a once-a-season tool — collapsed unless adding/editing
+  // (auto-open when the roster is empty, there's nothing else to show).
+  const [formOpen, setFormOpen] = useState(roster.length === 0);
   const [name, setName] = useState("");
   const [numberStr, setNumberStr] = useState("");
   const [note, setNote] = useState("");
@@ -29,9 +32,11 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
     setNumberStr("");
     setNote("");
     setPhoto(undefined);
+    setFormOpen(false);
   }
 
   function startEdit(p: Player) {
+    setFormOpen(true);
     setEditingId(p.id);
     setName(p.name);
     setNumberStr(p.number === undefined ? "" : String(p.number));
@@ -73,9 +78,21 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
 
   return (
     <div className="flex flex-col gap-5">
-      <h1 className="text-[21px] font-semibold tracking-[-0.02em]">Roster</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-[21px] font-semibold tracking-[-0.02em]">Roster</h1>
+        {!formOpen && (
+          <button
+            type="button"
+            onClick={() => setFormOpen(true)}
+            className="min-h-[44px] rounded-[11px] border border-hairline2 bg-card px-4 text-[14px] font-medium text-mutedink active:scale-[0.98]"
+          >
+            + Add player
+          </button>
+        )}
+      </div>
 
-      {/* Add / edit form */}
+      {/* Add / edit form — only while actually adding or editing */}
+      {formOpen && (
       <section className="flex flex-col gap-3 rounded-xl border border-hairline2 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
           {editingId ? "Edit player" : "Add player"}
@@ -137,17 +154,16 @@ export function SetupScreen({ roster, onSave, onDelete, onNext, onLoadDemo, onEr
           >
             {editingId ? "Save changes" : "Add player"}
           </button>
-          {editingId && (
-            <button
-              type="button"
-              onClick={resetForm}
-              className="min-h-[48px] rounded-[11px] border border-hairline2 bg-card px-4 text-[14px] font-medium text-mutedink active:scale-[0.98]"
-            >
-              Cancel
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={resetForm}
+            className="min-h-[48px] rounded-[11px] border border-hairline2 bg-card px-4 text-[14px] font-medium text-mutedink active:scale-[0.98]"
+          >
+            Cancel
+          </button>
         </div>
       </section>
+      )}
 
       {/* Player list — thin rows, same shape as pre-game */}
       <section>
