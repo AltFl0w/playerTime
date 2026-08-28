@@ -138,27 +138,38 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
           </h2>
           <span className="text-xs text-neutral-400">tap no-shows</span>
         </div>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {roster.map((p) => {
+        {/* One thin row per kid: the whole roster answers "who's here?" in a
+            single glance, and each row is still a full-width ≥44px toggle. */}
+        <div className="overflow-hidden rounded-xl border border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          {roster.map((p, i) => {
             const out = absent.has(p.id);
             return (
               <button
                 type="button"
                 key={p.id}
                 onClick={() => toggle(p.id)}
-                className={`flex items-center gap-2 rounded-[7px] p-1.5 text-left transition active:scale-[0.97] ${
-                  out ? "bg-neutral-100 opacity-55" : "bg-white shadow-[0_1px_3px_rgba(26,26,30,0.06)] ring-1 ring-hairline"
+                className={`flex min-h-[46px] w-full items-center gap-2.5 px-3 text-left active:bg-canvas ${
+                  i > 0 ? "border-t border-hairline" : ""
                 }`}
               >
-                <Avatar player={{ ...p, photoDataUrl: out ? undefined : p.photoDataUrl }} className="h-10 w-10" />
-                <div className="min-w-0 flex-1">
-                  <div className={`truncate text-sm font-bold ${out ? "line-through text-neutral-400" : ""}`}>
-                    {p.name.split(" ")[0]}
-                  </div>
-                  <div className={`text-[11px] font-bold uppercase ${out ? "text-red-500" : "text-green-600"}`}>
-                    {out ? "out" : "here"}
-                  </div>
-                </div>
+                <Avatar
+                  player={{ ...p, photoDataUrl: out ? undefined : p.photoDataUrl }}
+                  className={`h-7 w-7 ${out ? "grayscale" : ""}`}
+                />
+                <span
+                  className={`min-w-0 flex-1 truncate text-[15px] font-semibold ${
+                    out ? "text-faintink line-through" : "text-ink"
+                  }`}
+                >
+                  {p.name.split(" ")[0]}
+                </span>
+                <span
+                  className={`rounded-full px-2.5 py-[3px] text-[10.5px] font-bold tracking-[0.05em] ${
+                    out ? "bg-canvas text-faintink" : "bg-stagedin-soft text-stagedin"
+                  }`}
+                >
+                  {out ? "OUT" : "HERE"}
+                </span>
               </button>
             );
           })}

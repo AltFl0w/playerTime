@@ -2,7 +2,7 @@ import type { GameConfig, GameEvent, GameState, Player, PlayerId, PlayerTimeStat
 import { fmtClock, fmtMinutes } from "../lib/format";
 import { buildReportSummary } from "../lib/report";
 import { shareReport } from "../lib/reportShare";
-import { Avatar, SectionTitle, btnAccent, btnGhost } from "./bits";
+import { Avatar, SectionTitle } from "./bits";
 
 interface Props {
   roster: Player[];
@@ -80,18 +80,18 @@ export function ReportScreen({
 
   return (
     <div className="flex flex-col gap-5">
-      <header className="rounded-[7px] bg-white p-5 text-center shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
-        <div className="text-xs font-bold uppercase tracking-widest text-[#2563eb]">
+      <header className="rounded-xl border border-hairline2 bg-card p-5 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
           final · {summary.formatLabel} · {summary.elapsedLabel}
         </div>
-        <h1 className="mt-2 text-2xl font-black leading-snug">{summary.verdict}</h1>
+        <h1 className="mt-2 text-[22px] font-semibold leading-snug tracking-[-0.02em]">{summary.verdict}</h1>
         {summary.dateLine && <p className="mt-1 text-sm text-neutral-500">{summary.dateLine}</p>}
       </header>
 
       {/* Rotation chart: the whole team on one screen, one line per kid —
           who played when (strip), how much (minutes), and how fair (delta).
           Dense on purpose: the coach scans it, no scrolling. */}
-      <section className="rounded-[7px] bg-white p-4 shadow-[0_1px_3px_rgba(26,26,30,0.06)]">
+      <section className="rounded-xl border border-hairline2 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
         <div className="mb-2 flex items-baseline justify-between">
           <SectionTitle>Playing time</SectionTitle>
           <span className="text-[10px] font-semibold text-neutral-400">
@@ -118,7 +118,7 @@ export function ReportScreen({
                   {stints.map(([s, e], i) => (
                     <div
                       key={i}
-                      className="absolute inset-y-0 rounded-full bg-[#2563eb]"
+                      className="absolute inset-y-0 rounded-full bg-ink"
                       style={{
                         left: `${(s / finalSec) * 100}%`,
                         width: `${Math.max(0.6, ((e - s) / finalSec) * 100)}%`,
@@ -134,13 +134,13 @@ export function ReportScreen({
                   ))}
                 </div>
                 <div className="flex w-[4.75rem] shrink-0 flex-col items-end">
-                  <span className="text-base font-black leading-tight tabular-nums">
+                  <span className="text-base font-bold leading-tight tabular-nums">
                     {fmtMinutes(st.playedSec)}
                     <span className="text-[10px] font-bold text-neutral-400"> min</span>
                   </span>
                   <span
                     className={`text-[10px] font-extrabold tabular-nums ${
-                      onTarget ? "text-neutral-400" : deltaSec > 0 ? "text-green-600" : "text-amber-600"
+                      onTarget ? "text-faintink" : deltaSec > 0 ? "text-stagedin" : "text-stagedout"
                     }`}
                   >
                     {onTarget ? "on target" : `${deltaSec > 0 ? "+" : "−"}${fmtClock(Math.abs(deltaSec))}`}
@@ -153,11 +153,11 @@ export function ReportScreen({
       </section>
 
       {summary.notes.length > 0 && (
-        <section className="rounded-[7px] bg-accenttint p-4 ring-1 ring-accent/20">
-          <div className="text-xs font-bold uppercase tracking-wider text-orange-700/70">Game notes</div>
+        <section className="rounded-xl border border-hairline2 bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">Game notes</div>
           <div className="mt-1 flex flex-col gap-0.5">
             {summary.notes.map((n, i) => (
-              <p key={i} className="py-0.5 text-sm font-bold text-orange-700">
+              <p key={i} className="py-0.5 text-sm font-medium text-mutedink">
                 {n}
               </p>
             ))}
@@ -165,24 +165,29 @@ export function ReportScreen({
         </section>
       )}
 
-      <div className="flex flex-col gap-2 pb-[env(safe-area-inset-bottom)]">
-        <button
-          type="button"
-          onClick={async () => {
-            const result = await shareReport(summary);
-            if (result === "copied") onNotice("Copied — paste in the parent chat");
-            if (result === "unavailable") onNotice("Screenshot this card for the parent group chat.");
-          }}
-          className={btnAccent}
-        >
-          Share
-        </button>
-        <button type="button" onClick={onNewGame} className={btnGhost}>
-          New game
-        </button>
-        <p className="mt-1 text-center text-xs text-neutral-400">
-          Screenshot this card for the parent group chat.
-        </p>
+      {/* Same dock pattern as the live screen: the screen's commits live in
+          the thumb zone — Share is the star, New game the quiet neighbor. */}
+      <div className="sticky bottom-0 -mx-4 border-t border-hairline bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={onNewGame}
+            className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
+          >
+            New game
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              const result = await shareReport(summary);
+              if (result === "copied") onNotice("Copied — paste in the parent chat");
+              if (result === "unavailable") onNotice("Screenshot this card for the parent group chat.");
+            }}
+            className="min-h-[52px] flex-1 rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99]"
+          >
+            Share
+          </button>
+        </div>
       </div>
     </div>
   );

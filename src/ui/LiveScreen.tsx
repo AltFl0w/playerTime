@@ -199,6 +199,7 @@ export function LiveScreen({
   const [fixFor, setFixFor] = useState<string | null>(null);
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
+  const [overflowOpen, setOverflowOpen] = useState(false);
 
   const byId = new Map(roster.map((p) => [p.id, p]));
   const rows: Row[] = [];
@@ -293,52 +294,31 @@ export function LiveScreen({
             </div>
           </div>
           <SunToggle on={sunMode} onToggle={onSunToggle} />
+          <button
+            type="button"
+            aria-label="More"
+            onClick={() => setOverflowOpen(true)}
+            className="min-h-[44px] min-w-[36px] rounded-[10px] border border-hairline2 bg-card text-[16px] font-bold text-mutedink active:scale-[0.98]"
+          >
+            ⋯
+          </button>
         </div>
       </div>
 
-      {/* Alarm banner — beep + suggestion pre-staged; the clock stays visible */}
-      {alarm && (
-        <div className="pt-banner flex items-center gap-3 rounded-xl border border-hairline2 bg-card px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <span
-            className={`h-2 w-2 shrink-0 rounded-full ${
-              alarm.kind === "forced" ? "bg-stagedout" : "bg-ink"
-            }`}
-          />
-          <div className="min-w-0 flex-1">
-            <div className="text-[14px] font-semibold text-ink">
-              {alarm.kind === "forced" ? "Long stint — swap soon" : "Sub time"}
-            </div>
-            <div className="text-[12px] text-mutedink">
-              suggestion staged — tap kids to change it
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={onDismissAlarm}
-            className="min-h-[44px] shrink-0 rounded-[10px] border border-hairline2 bg-card px-4 text-[13px] font-semibold text-mutedink active:scale-[0.98]"
-          >
-            Quiet
-          </button>
-        </div>
-      )}
-
-      {/* Break card */}
+      {/* Break strip — the board stays: water break is when the next lineup
+          gets planned. The Start button lives in the dock. */}
       {atBreak && (
-        <section className="rounded-xl border border-hairline2 bg-card p-5 text-center shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
-            {isFinalBreak ? "full time" : `quarter ${quarter} done`}
+        <div className="flex items-center gap-3 rounded-xl border border-hairline2 bg-card px-4 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-ink" />
+          <div className="min-w-0 flex-1">
+            <span className="text-[14px] font-semibold text-ink">
+              {isFinalBreak ? "Full time" : `Quarter ${quarter} done — water break`}
+            </span>
+            <span className="ml-2 text-[12px] text-mutedink">
+              {isFinalBreak ? "great game, coach" : "clock and stints frozen"}
+            </span>
           </div>
-          <div className="mt-1 text-[22px] font-semibold tracking-[-0.02em] text-ink">
-            {isFinalBreak ? "Great game, coach" : "Water break"}
-          </div>
-          <button
-            type="button"
-            onClick={isFinalBreak ? onEnd : onPauseToggle}
-            className="mt-4 min-h-[52px] w-full rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99]"
-          >
-            {isFinalBreak ? "See report" : `Start Q${quarter + 1}`}
-          </button>
-        </section>
+        </div>
       )}
 
       {/* ON FIELD — fixed 2×2 */}
@@ -419,54 +399,47 @@ export function LiveScreen({
         )}
       </section>
 
-      {/* NOT HERE */}
+      {/* NOT HERE — rare, so name-only mini chips that barely spend space */}
       {awayRows.length > 0 && (
-        <section>
-          <div className="mb-2 px-0.5 text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
-            Not here — tap when they arrive
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {awayRows.map(({ p }) => (
-              <button
-                type="button"
-                key={p.id}
-                onClick={() => onSetAvailability(p.id, true)}
-                className="flex min-h-[52px] items-center justify-center rounded-xl border border-hairline bg-card text-[15px] font-semibold text-faintink active:scale-[0.98]"
-              >
-                {p.name.split(" ")[0]}
-              </button>
-            ))}
-          </div>
-        </section>
+        <div className="flex flex-wrap items-center gap-1.5 px-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
+            not here
+          </span>
+          {awayRows.map(({ p }) => (
+            <button
+              type="button"
+              key={p.id}
+              onClick={() => onSetAvailability(p.id, true)}
+              className="min-h-[36px] rounded-full border border-hairline bg-card px-3 text-[13px] font-semibold text-faintink active:scale-[0.98]"
+            >
+              {p.name.split(" ")[0]} · arrived?
+            </button>
+          ))}
+        </div>
       )}
 
-      <button
-        type="button"
-        onClick={() => setConfirmEnd(true)}
-        className="min-h-[44px] w-full rounded-[11px] text-[13px] font-semibold text-faintink"
-      >
-        End game
-      </button>
-
-      {/* Dock: apply the staged change when one exists, otherwise pause/undo */}
+      {/* The dock is the one shape-shifter: whatever the moment's commit is,
+          it's this bar — alarm > staged change > quarter start > pause. */}
       <div className="sticky bottom-0 -mx-4 border-t border-hairline bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-        {outN + inN > 0 ? (
+        {alarm || outN + inN > 0 ? (
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={clearStaged}
+              onClick={alarm ? onDismissAlarm : clearStaged}
               className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
             >
-              Clear
+              {alarm ? "Quiet" : "Clear"}
             </button>
             <button
               type="button"
               onClick={applyStaged}
-              disabled={overCap}
+              disabled={overCap || outN + inN === 0}
               className="min-h-[52px] flex-1 rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99] disabled:border disabled:border-hairline disabled:bg-canvas disabled:text-faintink"
             >
               {overCap ? (
                 "Too many going in — pick who comes off"
+              ) : outN + inN === 0 ? (
+                "Tap kids to set up the change"
               ) : (
                 <>
                   Make the change{" "}
@@ -478,6 +451,14 @@ export function LiveScreen({
               )}
             </button>
           </div>
+        ) : atBreak ? (
+          <button
+            type="button"
+            onClick={isFinalBreak ? onEnd : onPauseToggle}
+            className="min-h-[52px] w-full rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99]"
+          >
+            {isFinalBreak ? "See report" : `Start Q${quarter + 1}`}
+          </button>
         ) : (
           <div className="flex gap-2">
             {canUndo && (
@@ -503,6 +484,34 @@ export function LiveScreen({
           </div>
         )}
       </div>
+
+      {/* Header overflow: once-a-game actions kept out of the main column */}
+      {overflowOpen && (
+        <div className="fixed inset-0 z-40 flex items-end bg-black/30" onClick={() => setOverflowOpen(false)}>
+          <div
+            className="w-full rounded-t-2xl border-t border-hairline bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col gap-2">
+              <SheetButton
+                label="End game — see report"
+                tone="danger"
+                onClick={() => {
+                  setOverflowOpen(false);
+                  setConfirmEnd(true);
+                }}
+              />
+              <button
+                type="button"
+                onClick={() => setOverflowOpen(false)}
+                className="min-h-[44px] text-[13px] font-semibold text-faintink"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Long-press actions */}
       {actionRow && !fixFor && (
