@@ -123,7 +123,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <header className="flex items-center justify-between">
         <button type="button" onClick={onBackToSetup} className="px-1 py-1 text-base font-bold text-neutral-400">
           ← Roster
@@ -138,23 +138,23 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
           </h2>
           <span className="text-xs text-neutral-400">tap no-shows</span>
         </div>
-        {/* One thin row per kid: the whole roster answers "who's here?" in a
-            single glance, and each row is still a full-width ≥44px toggle. */}
-        <div className="overflow-hidden rounded-xl border border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
-          {roster.map((p, i) => {
+        {/* 2-up grid halves the height of the one-per-row list so the whole
+            Game day screen fits without scrolling; each cell stays a ≥44px toggle. */}
+        <div className="grid grid-cols-2 gap-1.5">
+          {roster.map((p) => {
             const out = absent.has(p.id);
             return (
               <button
                 type="button"
                 key={p.id}
                 onClick={() => toggle(p.id)}
-                className={`flex min-h-[46px] w-full items-center gap-2.5 px-3 text-left active:bg-canvas ${
-                  i > 0 ? "border-t border-hairline" : ""
+                className={`flex min-h-[46px] items-center gap-2 rounded-xl border px-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] active:scale-[0.98] ${
+                  out ? "border-hairline bg-canvas" : "border-hairline2 bg-card"
                 }`}
               >
                 <Avatar
                   player={{ ...p, photoDataUrl: out ? undefined : p.photoDataUrl }}
-                  className={`h-7 w-7 ${out ? "grayscale" : ""}`}
+                  className={`h-7 w-7 shrink-0 ${out ? "grayscale" : ""}`}
                 />
                 <span
                   className={`min-w-0 flex-1 truncate text-[15px] font-semibold ${
@@ -164,7 +164,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
                   {p.name.split(" ")[0]}
                 </span>
                 <span
-                  className={`rounded-full px-2.5 py-[3px] text-[10.5px] font-bold tracking-[0.05em] ${
+                  className={`shrink-0 rounded-full px-2 py-[3px] text-[10px] font-bold tracking-[0.05em] ${
                     out ? "bg-canvas text-faintink" : "bg-stagedin-soft text-stagedin"
                   }`}
                 >
@@ -174,7 +174,7 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
             );
           })}
         </div>
-        <p className="mt-2 text-[11px] text-neutral-400">
+        <p className="mt-1.5 text-[11px] text-neutral-400">
           No-shows can still join later — mark them Arrived during the game.
         </p>
       </section>

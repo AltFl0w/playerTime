@@ -110,7 +110,10 @@ export default function App() {
   useLiveHistoryTrap(screen === "live" && !!game && !baseState.ended);
 
   useEffect(() => {
-    const live = screen === "live" && !!game && !baseState.ended;
+    // Pregame gets the same scroll lock as live: the coach is glancing at this
+    // screen right up to kickoff and a rubber-banding page reads as broken.
+    const live =
+      (screen === "live" && !!game && !baseState.ended) || screen === "pregame";
     document.documentElement.classList.toggle("pt-live", live);
     return () => document.documentElement.classList.remove("pt-live");
   }, [screen, game, baseState.ended]);
