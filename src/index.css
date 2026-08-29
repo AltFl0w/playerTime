@@ -22,6 +22,10 @@
   html {
     letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
+    /* No screen should rubber-band — this kills iOS pull-to-refresh and the
+       bounce everywhere without blocking real scrolling where content is tall
+       (long roster, expanded settings). */
+    overscroll-behavior: none;
   }
   button:not(:disabled),
   [role="button"]:not(:disabled) {
@@ -69,11 +73,6 @@
   .pt-banner {
     animation: none;
   }
-}
-
-/* Kill iOS pull-to-refresh / rubber-band while a live game is on screen */
-.pt-live {
-  overscroll-behavior: none;
 }
 
 /* Sun mode: same design, harder contrast for direct sunlight */
