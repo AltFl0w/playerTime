@@ -27,6 +27,24 @@ type Screen = "setup" | "pregame" | "live" | "report";
 
 const EMPTY_EVENTS: GameEvent[] = [];
 
+// Greedy left-to-right clustering of due times (each cluster spans at most the
+// tolerance window); returns the start of the largest cluster, earliest wins
+// ties. Null when nobody is on the field.
+function majorityDueSec(dues: number[]): number | null {
+  if (dues.length === 0) return null;
+  const sorted = [...dues].sort((a, b) => a - b);
+  let best: { start: number; size: number } | null = null;
+  let i = 0;
+  while (i < sorted.length) {
+    const start = sorted[i];
+    let j = i;
+    while (j < sorted.length && sorted[j] - start <= SUB_GROUP_TOLERANCE_SEC) j++;
+    if (!best || j - i > best.size) best = { start, size: j - i };
+    i = j;
+  }
+  return best?.start ?? null;
+}
+
 const ROOT_CLASSES =
   "pt-app min-h-dvh bg-canvas px-4 pb-8 pt-[max(1rem,env(safe-area-inset-top))] text-ink";
 
@@ -189,14 +207,18 @@ export default function App() {
 
   // Per-kid sub timing: each kid is due off when HIS stint reaches the
   // configured interval. Breaks/pauses freeze stints without resetting them
-  // (a kid at 4:00 of a 5:00 interval is due 1:00 into the next quarter), and
-  // staggered subs produce staggered dues — the alarm tracks the earliest.
+  // (a kid at 4:00 of a 5:00 interval is due 1:00 into the next quarter).
   // dueK = elapsed + (interval − stint) is a constant game-time crossing.
   const subIntervalSec = Math.max(1, store.config.subIntervalSec);
   const fieldDueSecs = Object.values(state.players)
     .filter((p) => p.onField)
     .map((p) => elapsedSec + subIntervalSec - p.currentStintSec);
-  const nextSubDueSec = fieldDueSecs.length > 0 ? Math.min(...fieldDueSecs) : Infinity;
+  // The MAJORITY owns the rhythm: cluster dues within the tolerance window and
+  // track the biggest cluster (earliest on ties). Sub 3 of 4 and the counter
+  // follows the three fresh kids — the one who stayed on doesn't drag a
+  // near-full-block alarm to his personal clock; he's simply overdue when the
+  // majority alarm rings and leads its suggestion.
+  const nextSubDueSec = majorityDueSec(fieldDueSecs) ?? Infinity;
 
   useEffect(() => {
     if (screen !== "live" || !clockRunning) return;
@@ -329,19 +351,18 @@ export default function App() {
     if (alarmOpenRef.current) return;
     prevForcedRef.current = forcedNow;
 
-    // Earliest crossing not yet alarmed. An ignored overdue kid stays excluded
-    // (his crossing is already ≤ alarmDone) so he can't re-ring forever, but
-    // the next kid to cross still fires — and the suggestion at that point
-    // naturally leads with whoever's been on longest.
+    // The majority block that hasn't been alarmed yet. Kids due EARLIER than
+    // the block (the one who stayed on through a partial sub) don't ring solo
+    // — they're simply overdue when the block alarm arrives and lead its
+    // suggestion. An ignored alarm can't re-ring (dues ≤ alarmDone are out),
+    // but the next block still fires.
     const unalarmed = fieldDueSecs.filter((d) => d > alarmDoneRef.current);
-    const due = unalarmed.length > 0 ? Math.min(...unalarmed) : Infinity;
+    const due = majorityDueSec(unalarmed) ?? Infinity;
     if (forcedNow && !wasForced) {
       openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
     } else if (elapsedSec >= due) {
-      // One alarm per BLOCK, not per kid: dues within the tolerance window
-      // ride this alarm (they're the suggested group), so a kid 90 seconds
-      // behind the block doesn't ring his own follow-up siren. A kid further
-      // off-rhythm keeps his own due and rings when it actually arrives.
+      // One alarm per BLOCK: everything due through the block's window is
+      // satisfied by this ring (it IS the suggested group).
       alarmDoneRef.current = due + SUB_GROUP_TOLERANCE_SEC;
       patchGame((g) => ({ ...g, alarmDoneAtSec: due + SUB_GROUP_TOLERANCE_SEC }));
       openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
