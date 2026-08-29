@@ -40,7 +40,8 @@ export type GameEvent =
   | { type: "SUB_OUT"; atSec: number; playerId: PlayerId }
   | { type: "DECLINE"; atSec: number; playerId: PlayerId }
   | { type: "MARK_READY"; atSec: number; playerId: PlayerId }
-  | { type: "SET_AVAILABILITY"; atSec: number; playerId: PlayerId; available: boolean };
+  | { type: "SET_AVAILABILITY"; atSec: number; playerId: PlayerId; available: boolean }
+  | { type: "ADJUST_TIME"; atSec: number; playerId: PlayerId; deltaSec: number };
 
 export interface PlayerTimeState {
   playerId: PlayerId;

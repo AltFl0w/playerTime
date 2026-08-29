@@ -23,6 +23,12 @@ export const ev = {
     playerId,
     available,
   }),
+  adjust: (playerId: string, atSec: number, deltaSec: number): GameEvent => ({
+    type: "ADJUST_TIME",
+    atSec,
+    playerId,
+    deltaSec,
+  }),
 };
 
 // Appends coach-follows-the-alarm rotations (one OUT + one IN per tick, chosen by

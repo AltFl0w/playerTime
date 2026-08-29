@@ -115,6 +115,14 @@ export function computeState(events: GameEvent[], config: GameConfig, roster: Pl
         ensure(ev.playerId).availability = ev.available ? "available" : "inactive";
         break;
       }
+      case "ADJUST_TIME": {
+        // Manual bookkeeping correction ("he actually played more/less") —
+        // touches only the total, never the live stint, so shields and the
+        // heat cap keep working off what's physically happening on the field.
+        const p = ensure(ev.playerId);
+        p.playedSec = Math.max(0, p.playedSec + ev.deltaSec);
+        break;
+      }
     }
   }
 

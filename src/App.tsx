@@ -214,14 +214,15 @@ export default function App() {
         available: presentIds.includes(p.id),
       }),
     );
-    // Starters: first playersOnField present kids by roster order. The first
-    // interval alarm rebalances from there.
-    const starters = store.roster.filter((p) => presentIds.includes(p.id)).slice(
-      0,
-      Math.max(0, store.config.playersOnField),
-    );
-    for (const p of starters) {
-      evts.push({ type: "SUB_IN", atSec: 0, playerId: p.id });
+    // Starters: presentIds arrives in the order the coach marked kids at the
+    // field, so the first playersOnField arrivals start. The first interval
+    // alarm rebalances from there.
+    const rosterIds = new Set(store.roster.map((p) => p.id));
+    const starters = presentIds
+      .filter((id) => rosterIds.has(id))
+      .slice(0, Math.max(0, store.config.playersOnField));
+    for (const id of starters) {
+      evts.push({ type: "SUB_IN", atSec: 0, playerId: id });
     }
     evts.push({ type: "START", atSec: 0 });
     intervalFiredRef.current = 0;
@@ -450,6 +451,11 @@ export default function App() {
             }
             onLeaveGame={leaveGame}
             onFixMistake={fixMistake}
+            onAdjustTime={(id, deltaSec) =>
+              pushEvents([
+                { type: "ADJUST_TIME", atSec: currentElapsedSec(), playerId: id, deltaSec },
+              ])
+            }
             canUndo={!alarm && lastUndoableSlice(events) !== null}
             onUndo={undoLast}
             sunMode={store.sunMode}

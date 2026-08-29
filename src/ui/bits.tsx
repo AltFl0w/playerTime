@@ -67,8 +67,8 @@ export function SectionTitle({ children }: { children: ReactNode }) {
   return <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">{children}</h2>;
 }
 
-// Icon-only: sun mode is a glanceable state, not a labeled setting — a 44px
-// sun that's filled when on says everything the old "SUN ON" block did.
+// Ghost icon: sun mode is a season-stable convenience, so the toggle earns no
+// chrome — a faint outline when off, solid ink when on. Tap target stays 44px.
 export function SunToggle({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
     <button
@@ -76,11 +76,11 @@ export function SunToggle({ on, onToggle }: { on: boolean; onToggle: () => void 
       onClick={onToggle}
       aria-pressed={on}
       aria-label={on ? "Sun mode on" : "Sun mode off"}
-      className={`flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] active:scale-[0.98] ${
-        on ? "bg-[#1a1a1e] text-white" : "border border-hairline2 bg-card text-mutedink"
+      className={`flex min-h-[44px] min-w-[44px] items-center justify-center active:scale-[0.95] ${
+        on ? "text-ink" : "text-faintink"
       }`}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
         <circle cx="12" cy="12" r="4" fill={on ? "currentColor" : "none"} />
         <path d="M12 2v2.5M12 19.5V22M2 12h2.5M19.5 12H22M4.9 4.9l1.8 1.8M17.3 17.3l1.8 1.8M4.9 19.1l1.8-1.8M17.3 6.7l1.8-1.8" />
       </svg>

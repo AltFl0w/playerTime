@@ -30,6 +30,7 @@ interface Props {
   onSetAvailability: (id: string, available: boolean) => void;
   onLeaveGame: (id: string) => void;
   onFixMistake: (wrongId: string, rightId: string) => void;
+  onAdjustTime: (id: string, deltaSec: number) => void;
   canUndo: boolean;
   onUndo: () => void;
   sunMode: boolean;
@@ -190,6 +191,7 @@ export function LiveScreen({
   onSetAvailability,
   onLeaveGame,
   onFixMistake,
+  onAdjustTime,
   canUndo,
   onUndo,
   sunMode,
@@ -218,6 +220,18 @@ export function LiveScreen({
 
   const suggestOutId = engine.suggestOut(state, config);
   const suggestInId = engine.suggestIn(state, config);
+  // "least played" is only information when someone else has actually played
+  // more — with the whole bench tied (game start, fresh quarter after a full
+  // rotation) the tag is just noise on an arbitrary kid.
+  const suggestedIn = suggestInId ? state.players[suggestInId] : null;
+  const leastPlayedMeaningful =
+    !!suggestedIn &&
+    rows.some(
+      ({ st }) =>
+        !st.onField &&
+        st.availability === "available" &&
+        st.playedSec > suggestedIn.playedSec + 1,
+    );
 
   // An alarm pre-stages the engine's suggestion — but never stomps a change
   // the coach already started building.
@@ -295,7 +309,6 @@ export function LiveScreen({
               </span>
             </div>
           </div>
-          <SunToggle on={sunMode} onToggle={onSunToggle} />
           <button
             type="button"
             aria-label="More"
@@ -390,7 +403,13 @@ export function LiveScreen({
                       <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
                     </>
                   }
-                  pill={declined ? "sat out" : p.id === suggestInId ? "least played" : null}
+                  pill={
+                    declined
+                      ? "sat out"
+                      : p.id === suggestInId && leastPlayedMeaningful
+                        ? "least played"
+                        : null
+                  }
                   dim={declined}
                   onTap={() => toggleIn(p.id)}
                   onLong={() => setActionId(p.id)}
@@ -495,6 +514,10 @@ export function LiveScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col gap-2">
+              <div className="flex min-h-[44px] items-center justify-between rounded-[11px] bg-canvas px-3.5">
+                <span className="text-[15px] font-semibold">Sun mode</span>
+                <SunToggle on={sunMode} onToggle={onSunToggle} />
+              </div>
               <SheetButton
                 label="End game — see report"
                 tone="danger"
@@ -555,15 +578,48 @@ export function LiveScreen({
                   }}
                 />
               )}
+              {/* Played-time correction: labeled value with ± steppers, applied
+                  immediately — the sheet's total re-renders from the replayed
+                  state, so what the coach sees is what's recorded. */}
+              <div className="flex min-h-[52px] items-center justify-between rounded-[11px] bg-canvas px-3.5">
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">
+                    played
+                  </div>
+                  <div className="text-[15px] font-extrabold tabular-nums">
+                    {fmtClock(actionRow.st.playedSec)}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    aria-label="subtract 30 seconds played"
+                    onClick={() => onAdjustTime(actionRow.p.id, -30)}
+                    className="flex min-h-[44px] min-w-[52px] items-center justify-center rounded-[9px] bg-card text-[13px] font-bold shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.96]"
+                  >
+                    −30s
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="add 30 seconds played"
+                    onClick={() => onAdjustTime(actionRow.p.id, 30)}
+                    className="flex min-h-[44px] min-w-[52px] items-center justify-center rounded-[9px] bg-card text-[13px] font-bold shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.96]"
+                  >
+                    +30s
+                  </button>
+                </div>
+              </div>
               {actionRow.st.availability !== "inactive" && (
-                <SheetButton
-                  label="Leaves the game (hurt / going home)"
-                  tone="danger"
+                <button
+                  type="button"
                   onClick={() => {
                     setConfirmLeaveId(actionRow.p.id);
                     setActionId(null);
                   }}
-                />
+                  className="min-h-[44px] text-[13px] font-semibold text-stagedout active:scale-[0.98]"
+                >
+                  Leaves the game (hurt / going home)
+                </button>
               )}
               <button
                 type="button"

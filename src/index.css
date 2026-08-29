@@ -22,6 +22,11 @@
   html {
     letter-spacing: -0.011em;
     -webkit-font-smoothing: antialiased;
+    /* This is an app, not a document: iOS long-press must mean "player
+       actions", never text selection with the Copy/Translate bar. */
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
     /* No screen should rubber-band — this kills iOS pull-to-refresh and the
        bounce everywhere without blocking real scrolling where content is tall
        (long roster, expanded settings). */
@@ -30,6 +35,11 @@
   button:not(:disabled),
   [role="button"]:not(:disabled) {
     cursor: pointer;
+  }
+  input,
+  textarea {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 

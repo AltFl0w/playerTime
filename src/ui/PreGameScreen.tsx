@@ -59,22 +59,18 @@ function Stepper({
 }
 
 export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackToSetup, sunMode, onSunToggle }: Props) {
-  // Most kids show up, so everyone starts present and the coach taps only the
-  // no-shows. Late arrivals join mid-game via "Arrived" in the list view.
-  const [absent, setAbsent] = useState<Set<string>>(() => new Set());
+  // The coach marks kids as they show up — arrival order matters, because the
+  // first playersOnField arrivals are the starting lineup. Unmarked kids just
+  // haven't arrived yet; they can still join mid-game via "Arrived".
+  const [arrived, setArrived] = useState<string[]>([]);
   // Settings persist all season, so collapsed is the normal case — a coach
   // shouldn't have to scroll a full stepper stack before every single game.
   const [expanded, setExpanded] = useState(false);
 
-  const presentIds = roster.filter((p) => !absent.has(p.id)).map((p) => p.id);
+  const presentIds = arrived;
 
   function toggle(id: string) {
-    setAbsent((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
+    setArrived((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   }
 
   // Quarter length is the knob the coach actually thinks in, but the stored
@@ -138,46 +134,52 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
           <h2 className="text-xs font-bold uppercase tracking-wider text-neutral-400">
             Who's here ({presentIds.length}/{roster.length})
           </h2>
-          <span className="text-xs text-neutral-400">tap no-shows</span>
+          <span className="text-xs text-neutral-400">tap as they arrive</span>
         </div>
         {/* 2-up grid halves the height of the one-per-row list so the whole
             Game day screen fits without scrolling; each cell stays a ≥44px toggle. */}
         <div className="grid grid-cols-2 gap-1.5">
           {roster.map((p) => {
-            const out = absent.has(p.id);
+            const idx = arrived.indexOf(p.id);
+            const here = idx >= 0;
+            const starts = here && idx < config.playersOnField;
             return (
               <button
                 type="button"
                 key={p.id}
                 onClick={() => toggle(p.id)}
                 className={`flex min-h-[46px] items-center gap-2 rounded-xl border px-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.04)] active:scale-[0.98] ${
-                  out ? "border-hairline bg-canvas" : "border-hairline2 bg-card"
+                  here ? "border-hairline2 bg-card" : "border-hairline bg-canvas"
                 }`}
               >
                 <Avatar
-                  player={{ ...p, photoDataUrl: out ? undefined : p.photoDataUrl }}
-                  className={`h-7 w-7 shrink-0 ${out ? "grayscale" : ""}`}
+                  player={{ ...p, photoDataUrl: here ? p.photoDataUrl : undefined }}
+                  className={`h-7 w-7 shrink-0 ${here ? "" : "grayscale"}`}
                 />
                 <span
                   className={`min-w-0 flex-1 truncate text-[15px] font-semibold ${
-                    out ? "text-faintink line-through" : "text-ink"
+                    here ? "text-ink" : "text-faintink"
                   }`}
                 >
                   {p.name.split(" ")[0]}
                 </span>
-                <span
-                  className={`shrink-0 rounded-full px-2 py-[3px] text-[10px] font-bold tracking-[0.05em] ${
-                    out ? "bg-canvas text-faintink" : "bg-stagedin-soft text-stagedin"
-                  }`}
-                >
-                  {out ? "OUT" : "HERE"}
-                </span>
+                {/* Arrival number doubles as the lineup: first playersOnField
+                    numbers start, and the pill says so. */}
+                {here && (
+                  <span
+                    className={`shrink-0 rounded-full px-2 py-[3px] text-[10px] font-bold tracking-[0.05em] ${
+                      starts ? "bg-stagedin-soft text-stagedin" : "bg-canvas text-mutedink"
+                    }`}
+                  >
+                    {starts ? `${idx + 1} · STARTS` : idx + 1}
+                  </span>
+                )}
               </button>
             );
           })}
         </div>
         <p className="mt-1.5 text-[11px] text-neutral-400">
-          No-shows can still join later — mark them Arrived during the game.
+          First {config.playersOnField} to arrive start. Kids marked later can still join mid-game.
         </p>
       </section>
 

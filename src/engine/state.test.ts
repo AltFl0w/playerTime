@@ -244,3 +244,26 @@ describe("computeState: ordering robustness", () => {
     expect(s2.players.b.currentStintSec).toBe(0);
   });
 });
+
+describe("ADJUST_TIME: manual played-time corrections", () => {
+  it("adds to playedSec and re-ranks, without touching the live stint", () => {
+    const events = [ev.start(0), ev.subIn("a", 0), ev.pause(120), ev.adjust("a", 120, 60)];
+    const s = computeState(events, cfg(), kids("a", "b"));
+    expect(s.players.a.playedSec).toBe(180);
+    expect(s.players.a.currentStintSec).toBe(120);
+    expect(s.players.a.ratio).toBeGreaterThan(0);
+  });
+
+  it("clamps a negative adjustment at zero", () => {
+    const events = [ev.start(0), ev.subIn("a", 0), ev.pause(30), ev.adjust("a", 30, -999)];
+    const s = computeState(events, cfg(), kids("a", "b"));
+    expect(s.players.a.playedSec).toBe(0);
+  });
+
+  it("accrual after the adjustment builds on the corrected total", () => {
+    const events = [ev.start(0), ev.subIn("a", 0), ev.adjust("a", 60, -30), ev.pause(120)];
+    const s = computeState(events, cfg(), kids("a", "b"));
+    // 60 played, corrected to 30, then 60 more on field.
+    expect(s.players.a.playedSec).toBe(90);
+  });
+});
