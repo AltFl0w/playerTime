@@ -47,21 +47,21 @@ export default function App() {
   const [alarm, setAlarm] = useState<LiveAlarm | null>(() => store.game?.alarm ?? null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
-  const intervalFiredRef = useRef<number>(
-    // Persisted value wins: the elapsed-derived fallback assumes every past
-    // interval already rang, which silently swallows an alarm that was open
+  // Game-sec the interval alarm is satisfied up to. The NEXT alarm is due one
+  // interval after max(this, last sub) — a manual line change resets the sub
+  // clock instead of the alarm ringing 30 seconds after fresh legs went in.
+  const alarmDoneRef = useRef<number>(
+    // Persisted value wins: the elapsed-derived fallback assumes everything
+    // up to now already rang, which silently swallows an alarm that was open
     // (or due) at the moment of a refresh.
-    store.game?.intervalFired ??
-      Math.floor(
-        (store.game?.events.length ?? 0) > 0
-          ? (engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
-              .elapsedSec +
-              (store.game?.runningSinceMs
-                ? Math.max(0, Math.floor((Date.now() - store.game.runningSinceMs) / 1000))
-                : 0)) /
-              Math.max(1, store.config.subIntervalSec)
-          : 0,
-      ),
+    store.game?.alarmDoneAtSec ??
+      ((store.game?.events.length ?? 0) > 0
+        ? engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
+            .elapsedSec +
+          (store.game?.runningSinceMs
+            ? Math.max(0, Math.floor((Date.now() - store.game.runningSinceMs) / 1000))
+            : 0)
+        : 0),
   );
   const prevForcedRef = useRef(false);
   const alarmOpenRef = useRef(!!store.game?.alarm);
@@ -102,6 +102,19 @@ export default function App() {
 
   const game = store.game;
   const events = game?.events ?? EMPTY_EVENTS;
+
+  // The sub clock is rolling, not absolute: the next alarm is one interval
+  // after the last line change (or the last alarm, whichever is later) — a
+  // manual sub at 24:20 means fresh legs, not "ring anyway at 25:00".
+  const lastSubAtSec = useMemo(() => {
+    let last = 0;
+    for (const e of events) {
+      if (e.type === "SUB_IN" || e.type === "SUB_OUT") last = Math.max(last, e.atSec);
+    }
+    return last;
+  }, [events]);
+  const nextSubDueSec =
+    Math.max(lastSubAtSec, game?.alarmDoneAtSec ?? 0) + Math.max(1, store.config.subIntervalSec);
 
   const baseState = useMemo(
     () => engine.computeState(events, store.config, store.roster),
@@ -161,21 +174,16 @@ export default function App() {
       stopAlarm();
       setAlarm(null);
       alarmOpenRef.current = false;
-      // The boundary is usually also a sub-interval multiple — mark that
-      // interval fired so the sub alarm can't hijack the water-break dock.
-      intervalFiredRef.current = Math.max(
-        intervalFiredRef.current,
-        Math.floor(boundary / Math.max(1, store.config.subIntervalSec)),
-      );
+      // A boundary can coincide with a due sub alarm — mark the alarm clock
+      // satisfied up to the break so the siren can't hijack the water-break
+      // dock, and the next sub rings one full interval into the new quarter.
+      alarmDoneRef.current = Math.max(alarmDoneRef.current, boundary);
       pushEvents([{ type: "PAUSE", atSec: boundary }]);
       patchGame((g) => ({
         ...g,
         runningSinceMs: null,
         alarm: null,
-        intervalFired: Math.max(
-          g.intervalFired ?? 0,
-          Math.floor(boundary / Math.max(1, store.config.subIntervalSec)),
-        ),
+        alarmDoneAtSec: Math.max(g.alarmDoneAtSec ?? 0, boundary),
       }));
     }
   });
@@ -262,7 +270,7 @@ export default function App() {
       evts.push({ type: "SUB_IN", atSec: 0, playerId: id });
     }
     evts.push({ type: "START", atSec: 0 });
-    intervalFiredRef.current = 0;
+    alarmDoneRef.current = 0;
     prevForcedRef.current = false;
     stopAlarm();
     setAlarm(null);
@@ -274,7 +282,7 @@ export default function App() {
         runningSinceMs: t,
         startedAtMs: t,
         pendingSwaps: [],
-        intervalFired: 0,
+        alarmDoneAtSec: 0,
         alarm: null,
       },
     }));
@@ -323,15 +331,15 @@ export default function App() {
     if (alarmOpenRef.current) return;
     prevForcedRef.current = forcedNow;
 
-    const idx = Math.floor(elapsedSec / Math.max(1, store.config.subIntervalSec));
+    const due = Math.max(lastSubAtSec, alarmDoneRef.current) + Math.max(1, store.config.subIntervalSec);
     if (forcedNow && !wasForced) {
       openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
-    } else if (idx > intervalFiredRef.current) {
-      intervalFiredRef.current = idx;
-      patchGame((g) => ({ ...g, intervalFired: idx }));
+    } else if (elapsedSec >= due) {
+      alarmDoneRef.current = due;
+      patchGame((g) => ({ ...g, alarmDoneAtSec: due }));
       openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
     }
-  }, [state, elapsedSec, screen, game, clockRunning, store.config]);
+  }, [state, elapsedSec, screen, game, clockRunning, store.config, lastSubAtSec]);
 
   // Shield nudges but never blanks the suggestion: with everyone fresh
   // (early game) fall back to the least-bad pull.
@@ -471,7 +479,7 @@ export default function App() {
             stopAlarm();
             setAlarm(null);
             alarmOpenRef.current = false;
-            intervalFiredRef.current = 0;
+            alarmDoneRef.current = 0;
             prevForcedRef.current = false;
                     setStore(emptyStore());
             setScreen("setup");
@@ -525,6 +533,7 @@ export default function App() {
                 { type: "ADJUST_TIME", atSec: currentElapsedSec(), playerId: id, deltaSec },
               ])
             }
+            nextSubInSec={Math.max(0, nextSubDueSec - elapsedSec)}
             canUndo={!alarm && lastUndoableSlice(events) !== null}
             onUndo={undoLast}
             sunMode={store.sunMode}

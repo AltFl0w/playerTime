@@ -15,11 +15,12 @@ export interface GameRecord {
   runningSinceMs: number | null;
   startedAtMs: number | null;
   pendingSwaps: PendingSwap[];
-  // Highest sub-interval index whose alarm has fired, and the alarm currently
-  // showing (if any) — persisted so a refresh mid-alarm re-shows the reminder
-  // instead of silently eating it. Optional: absent on pre-existing games.
-  // (Structural copy of ui LiveAlarm — the store can't import from ui.)
-  intervalFired?: number;
+  // Game-sec the interval alarm has been satisfied up to, and the alarm
+  // currently showing (if any) — persisted so a refresh mid-alarm re-shows
+  // the reminder instead of silently eating it. Optional: absent on
+  // pre-existing games. (Alarm is a structural copy of ui LiveAlarm — the
+  // store can't import from ui.)
+  alarmDoneAtSec?: number;
   alarm?: { kind: "interval" | "forced"; outId: string | null; inId: string | null } | null;
 }
 

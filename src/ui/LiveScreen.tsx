@@ -31,6 +31,7 @@ interface Props {
   onLeaveGame: (id: string) => void;
   onFixMistake: (wrongId: string, rightId: string) => void;
   onAdjustTime: (id: string, deltaSec: number) => void;
+  nextSubInSec: number;
   canUndo: boolean;
   onUndo: () => void;
   sunMode: boolean;
@@ -206,6 +207,7 @@ export function LiveScreen({
   onLeaveGame,
   onFixMistake,
   onAdjustTime,
+  nextSubInSec,
   canUndo,
   onUndo,
   sunMode,
@@ -296,10 +298,9 @@ export function LiveScreen({
   const quarterLenSec = Math.max(1, Math.round(config.gameLengthSec / Math.max(1, config.quarterCount)));
   const intoQuarter = elapsedSec - (quarter - 1) * quarterLenSec;
   const quarterLeft = Math.max(0, quarterLenSec - intoQuarter);
-  const nextAlarmIn = Math.max(
-    0,
-    (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec,
-  );
+  // Rolling sub clock, supplied by App: one interval after the last line
+  // change (or last alarm), not the next absolute multiple of game time.
+  const nextAlarmIn = nextSubInSec;
 
   // The next swap, previewed: the biggest group that can rotate AT THE NEXT
   // SUB TIME — eligibility is projected to the alarm (current stint + time
