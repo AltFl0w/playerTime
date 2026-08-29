@@ -332,30 +332,29 @@ export function LiveScreen({
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header: countdown owns it; totals sit small on the right */}
+      {/* Header: NEXT SUB is the star — big and black. The quarter clock sits
+          right at the same size in lighter gray: big and legible, not
+          competing. Game total lives at the very bottom under the dock. */}
       <div className="-mx-4 flex items-end justify-between border-b border-hairline px-5 pb-4">
-        <div className="flex items-baseline gap-2.5">
-          <span className="text-[13px] font-semibold tracking-[0.02em] text-faintink">
-            Q{quarter}
+        <div className="flex flex-col gap-1">
+          <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
+            NEXT SUB
           </span>
           <span className="text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums text-ink">
-            {atBreak || state.ended ? "0:00" : fmtClock(quarterLeft)}
-          </span>
-          <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
-            {clockRunning ? "LEFT" : atBreak ? "BREAK" : "PAUSED"}
+            {clockRunning ? fmtClock(nextAlarmIn) : "—"}
           </span>
         </div>
         <div className="flex items-center gap-2.5">
-          <div className="text-right text-[12px] leading-[1.7] text-faintink">
-            <div>
-              game <span className="font-medium tabular-nums text-mutedink">{fmtClock(elapsedSec)}</span>
-            </div>
-            <div>
-              next sub{" "}
-              <span className="font-medium tabular-nums text-mutedink">
-                {clockRunning ? fmtClock(nextAlarmIn) : "—"}
-              </span>
-            </div>
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[13px] font-semibold tracking-[0.02em] text-faintink">
+              Q{quarter}
+            </span>
+            <span className="text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums text-neutral-400">
+              {atBreak || state.ended ? "0:00" : fmtClock(quarterLeft)}
+            </span>
+            <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
+              {clockRunning ? "LEFT" : atBreak ? "BREAK" : "PAUSED"}
+            </span>
           </div>
           <button
             type="button"
@@ -571,6 +570,9 @@ export function LiveScreen({
             </button>
           </div>
         )}
+        <div className="pt-1.5 text-center text-[12px] text-faintink">
+          game <span className="font-medium tabular-nums text-mutedink">{fmtClock(elapsedSec)}</span>
+        </div>
       </div>
 
       {/* Header overflow: once-a-game actions kept out of the main column */}
