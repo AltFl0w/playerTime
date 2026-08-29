@@ -245,8 +245,9 @@ export function LiveScreen({
     if (st) rows.push({ p, st });
   }
 
-  // Both boards read longest-total first — the coach's eye goes to who's
-  // played most, and the next-in kids naturally sink to the bottom of bench.
+  // Each board leads with who the coach acts on next: field longest-total
+  // first (who's due off), bench least-total first (who goes in) — declined
+  // kids sink below the available ones.
   const byPlayedDesc = (a: Row, b: Row) => b.st.playedSec - a.st.playedSec;
   const fieldRows = rows.filter(({ st }) => st.onField).sort(byPlayedDesc);
   const benchRows = rows
@@ -254,7 +255,11 @@ export function LiveScreen({
       ({ st }) =>
         !st.onField && (st.availability === "available" || st.availability === "declined_wait"),
     )
-    .sort(byPlayedDesc);
+    .sort(
+      (a, b) =>
+        Number(a.st.availability === "declined_wait") -
+          Number(b.st.availability === "declined_wait") || a.st.playedSec - b.st.playedSec,
+    );
   const awayRows = rows.filter(({ st }) => !st.onField && st.availability === "inactive");
 
   const suggestOutId = engine.suggestOut(state, config);
