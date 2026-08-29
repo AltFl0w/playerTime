@@ -82,6 +82,7 @@ function Chip({
   time,
   pill,
   dim,
+  hinted,
   onTap,
   onLong,
   big,
@@ -92,6 +93,8 @@ function Chip({
   time: React.ReactNode;
   pill: string | null;
   dim?: boolean;
+  /** Soft forecast of the next swap: dashed outline only, never a selection. */
+  hinted?: boolean;
   onTap: () => void;
   onLong: () => void;
   big?: boolean;
@@ -114,7 +117,13 @@ function Chip({
       className={`relative flex flex-col items-start gap-[3px] rounded-xl border px-[13px] pb-[11px] pt-[13px] text-left active:scale-[0.98] ${
         big ? "min-h-[98px]" : "min-h-[92px]"
       } ${
-        staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+        staged
+          ? stagedCls
+          : hinted
+            ? `border-dashed bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
+                stagedLabel === "OFF" ? "border-stagedout-line" : "border-stagedin-line"
+              }`
+            : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       } ${dim ? "opacity-55" : ""}`}
     >
       <span
@@ -212,14 +221,30 @@ export function LiveScreen({
     if (st) rows.push({ p, st });
   }
 
-  const fieldRows = rows.filter(({ st }) => st.onField);
-  const benchRows = rows.filter(
-    ({ st }) => !st.onField && (st.availability === "available" || st.availability === "declined_wait"),
-  );
+  // Both boards read longest-total first — the coach's eye goes to who's
+  // played most, and the next-in kids naturally sink to the bottom of bench.
+  const byPlayedDesc = (a: Row, b: Row) => b.st.playedSec - a.st.playedSec;
+  const fieldRows = rows.filter(({ st }) => st.onField).sort(byPlayedDesc);
+  const benchRows = rows
+    .filter(
+      ({ st }) =>
+        !st.onField && (st.availability === "available" || st.availability === "declined_wait"),
+    )
+    .sort(byPlayedDesc);
   const awayRows = rows.filter(({ st }) => !st.onField && st.availability === "inactive");
 
   const suggestOutId = engine.suggestOut(state, config);
   const suggestInId = engine.suggestIn(state, config);
+
+  // The next swap, previewed: the biggest group that could rotate at the next
+  // sub alarm — every shield-eligible field kid paired with a bench kid, both
+  // sides in the engine's own priority order. Purely a forecast (soft dashed
+  // outline on the chips); staging stays 100% the coach's.
+  const nextEligibleOut = engine.rankOutCandidates(state, config).filter((c) => c.eligible);
+  const nextAvailIn = engine.rankInCandidates(state);
+  const nextSwapN = state.ended ? 0 : Math.min(nextEligibleOut.length, nextAvailIn.length);
+  const nextOutIds = new Set(nextEligibleOut.slice(0, nextSwapN).map((c) => c.playerId));
+  const nextInIds = new Set(nextAvailIn.slice(0, nextSwapN).map((c) => c.playerId));
   // "least played" is only information when someone else has actually played
   // more — with the whole bench tied (game start, fresh quarter after a full
   // rotation) the tag is just noise on an arbitrary kid.
@@ -361,6 +386,7 @@ export function LiveScreen({
                 </>
               }
               pill={p.id === suggestOutId ? "longest on" : null}
+              hinted={nextOutIds.has(p.id)}
               onTap={() => toggleOut(p.id)}
               onLong={() => setActionId(p.id)}
             />
@@ -411,6 +437,7 @@ export function LiveScreen({
                         : null
                   }
                   dim={declined}
+                  hinted={nextInIds.has(p.id)}
                   onTap={() => toggleIn(p.id)}
                   onLong={() => setActionId(p.id)}
                 />
@@ -489,6 +516,15 @@ export function LiveScreen({
                 className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
               >
                 Undo
+              </button>
+            )}
+            {nextSwapN > 0 && (
+              <button
+                type="button"
+                onClick={() => onApplyChange([...nextOutIds], [...nextInIds])}
+                className="min-h-[52px] flex-1 rounded-[11px] border border-stagedin-line bg-stagedin-soft text-[15px] font-semibold text-stagedin active:scale-[0.99]"
+              >
+                Swap <span className="tabular-nums">{nextSwapN}⇄{nextSwapN}</span>
               </button>
             )}
             <button
