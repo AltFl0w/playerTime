@@ -138,16 +138,29 @@ export default function App() {
   // Auto-pause exactly once per boundary, detected by crossing rather than
   // landing exactly on it — a sleeping screen can skip the exact second.
   // Backdated to the boundary: the app is the timekeeper, so overshoot from
-  // the missed render is discarded, not credited to the quarter.
-  const autoPausedAtRef = useRef<number | null>(null);
+  // the missed render is discarded, not credited to the quarter. The
+  // fired-already guard is the log itself (a PAUSE at exactly the boundary),
+  // not a ref — a ref starts empty on every mount, so a refresh in Q2+ would
+  // re-fire and backdate a bogus PAUSE, erasing real minutes.
   useEffect(() => {
     if (!clockRunning || !game || baseState.ended) return;
-    const boundary = Math.floor(elapsedSec / quarterLenSec) * quarterLenSec;
-    if (boundary > 0 && elapsedSec >= boundary && autoPausedAtRef.current !== boundary) {
-      autoPausedAtRef.current = boundary;
+    // Clamp to the final whistle: reopened long after full time, the clock
+    // stops at game length instead of crediting phantom quarters.
+    const boundary = Math.min(
+      Math.floor(elapsedSec / quarterLenSec) * quarterLenSec,
+      quarterLenSec * Math.max(1, store.config.quarterCount),
+    );
+    const alreadyPaused = events.some((e) => e.type === "PAUSE" && e.atSec === boundary);
+    if (boundary > 0 && elapsedSec >= boundary && !alreadyPaused) {
       stopAlarm();
       setAlarm(null);
       alarmOpenRef.current = false;
+      // The boundary is usually also a sub-interval multiple — mark that
+      // interval fired so the sub alarm can't hijack the water-break dock.
+      intervalFiredRef.current = Math.max(
+        intervalFiredRef.current,
+        Math.floor(boundary / Math.max(1, store.config.subIntervalSec)),
+      );
       pushEvents([{ type: "PAUSE", atSec: boundary }]);
       patchGame((g) => ({ ...g, runningSinceMs: null }));
     }
@@ -251,7 +264,10 @@ export default function App() {
   function pauseToggle() {
     if (!game || baseState.ended) return;
     if (clockRunning) {
-      pushEvents([{ type: "PAUSE", atSec: elapsedSec }]);
+      // Fresh read, not the render-cached elapsedSec: tapped right after the
+      // phone wakes, the cached value predates the whole background span and
+      // stamping with it would erase that time from the game.
+      pushEvents([{ type: "PAUSE", atSec: currentElapsedSec() }]);
       patchGame((g) => ({ ...g, runningSinceMs: null }));
     } else {
       const t = Date.now();
@@ -265,7 +281,7 @@ export default function App() {
     stopAlarm();
     setAlarm(null);
     alarmOpenRef.current = false;
-    pushEvents([{ type: "END", atSec: elapsedSec }]);
+    pushEvents([{ type: "END", atSec: currentElapsedSec() }]);
     patchGame((g) => ({ ...g, runningSinceMs: null }));
     setScreen("report");
   }
