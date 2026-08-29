@@ -138,30 +138,33 @@ function Chip({
           }`}
         />
       )}
-      <span
-        className={`font-semibold leading-[1.15] tracking-[-0.02em] ${
-          big ? "text-[17px]" : "text-[15.5px]"
-        } ${nameCls}`}
-      >
-        {player.name.split(" ")[0]}
-      </span>
-      {/* Tags sit in-flow under the name — an overlaid pill covers the name
-          in narrow bench cells, and the name is the one thing a coach reads. */}
-      {staged ? (
+      {/* Name owns the left, tag sits top-right in the SAME row — under the
+          name is the busiest spot on the card, and inline-right can't cover
+          the name the way an absolute overlay did (the name just truncates). */}
+      <div className="flex w-full items-start justify-between gap-1">
         <span
-          className={`rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
-            stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
-          }`}
+          className={`min-w-0 truncate font-semibold leading-[1.15] tracking-[-0.02em] ${
+            big ? "text-[17px]" : "text-[15.5px]"
+          } ${nameCls}`}
         >
-          {stagedLabel}
+          {player.name.split(" ")[0]}
         </span>
-      ) : (
-        pill && (
-          <span className="rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
-            {pill}
+        {staged ? (
+          <span
+            className={`shrink-0 rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
+              stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
+            }`}
+          >
+            {stagedLabel}
           </span>
-        )
-      )}
+        ) : (
+          pill && (
+            <span className="shrink-0 rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
+              {pill}
+            </span>
+          )
+        )}
+      </div>
       <span className="mt-auto text-[12.5px] tabular-nums text-mutedink">{time}</span>
     </button>
   );
@@ -385,11 +388,11 @@ export function LiveScreen({
 
       {/* ON FIELD — fixed 2×2 */}
       <section>
-        <div className="mb-2 flex items-baseline justify-between px-0.5">
+        {/* No inline gesture coaching — the legend lives in the ⋯ sheet. */}
+        <div className="mb-2 px-0.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
             On field
           </span>
-          <span className="text-[12px] text-faintink">tap — comes off · hold — more</span>
         </div>
         <div className="grid grid-cols-2 gap-2">
           {fieldRows.map(({ p, st }) => (
@@ -435,11 +438,10 @@ export function LiveScreen({
 
       {/* BENCH — fixed row */}
       <section>
-        <div className="mb-2 flex items-baseline justify-between px-0.5">
+        <div className="mb-2 px-0.5">
           <span className="text-[11px] font-semibold uppercase tracking-[0.06em] text-faintink">
             Bench
           </span>
-          <span className="text-[12px] text-faintink">tap — goes in</span>
         </div>
         {benchRows.length === 0 ? (
           <p className="px-0.5 text-[13px] text-faintink">Nobody on the bench.</p>
@@ -587,6 +589,9 @@ export function LiveScreen({
                 <span className="text-[15px] font-semibold">Sun mode</span>
                 <SunToggle on={sunMode} onToggle={onSunToggle} />
               </div>
+              <p className="px-1 text-[12px] leading-snug text-faintink">
+                Tap a kid to stage a sub · hold a kid for fixes and more
+              </p>
               <SheetButton
                 label="End game — see report"
                 tone="danger"
@@ -614,19 +619,30 @@ export function LiveScreen({
             className="w-full rounded-t-2xl border-t border-hairline bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Who + where: the coach long-pressed a face, the sheet confirms
-                it and anchors every action below to that kid. */}
-            <div className="mb-3 flex items-baseline justify-between border-b border-hairline pb-3">
-              <span className="text-[20px] font-bold tracking-[-0.02em]">
-                {actionRow.p.name.split(" ")[0]}
-              </span>
-              <span className="text-[12px] font-semibold text-mutedink">
-                {actionRow.st.onField
-                  ? `on field · ${fmtClock(actionRow.st.currentStintSec)} this stint`
-                  : actionRow.st.availability === "declined_wait"
-                    ? "bench · sitting out"
-                    : `bench · ${fmtClock(actionRow.st.playedSec)} played`}
-              </span>
+            {/* Who + where, stacked left; the X is the one way out — no
+                Cancel row eating a whole line at the bottom. Played time
+                lives only in its card below. */}
+            <div className="mb-3 flex items-start justify-between border-b border-hairline pb-3">
+              <div>
+                <div className="text-[20px] font-bold leading-tight tracking-[-0.02em]">
+                  {actionRow.p.name.split(" ")[0]}
+                </div>
+                <div className="text-[12px] font-semibold text-mutedink">
+                  {actionRow.st.onField
+                    ? `on field · ${fmtClock(actionRow.st.currentStintSec)} this stint`
+                    : actionRow.st.availability === "declined_wait"
+                      ? "bench · sitting out"
+                      : "bench"}
+                </div>
+              </div>
+              <button
+                type="button"
+                aria-label="Close"
+                onClick={() => setActionId(null)}
+                className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-[10px] border border-hairline2 bg-card text-[15px] font-bold text-mutedink active:scale-[0.96]"
+              >
+                ✕
+              </button>
             </div>
             {/* Two columns, two jobs: actions on the left, the played-time
                 correction on the right with its steppers under the number —
@@ -703,13 +719,6 @@ export function LiveScreen({
                 </div>
               </div>
             </div>
-            <button
-              type="button"
-              onClick={() => setActionId(null)}
-              className="mt-2 min-h-[44px] w-full text-center text-[13px] font-semibold text-faintink"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       )}
