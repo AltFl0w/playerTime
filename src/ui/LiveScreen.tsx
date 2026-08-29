@@ -628,54 +628,67 @@ export function LiveScreen({
                     : `bench · ${fmtClock(actionRow.st.playedSec)} played`}
               </span>
             </div>
-            <div className="flex flex-col gap-2">
-              {actionRow.st.availability === "declined_wait" && (
-                <SheetButton
-                  label="Ready to play again"
-                  tone="good"
-                  onClick={() => {
-                    onMarkReady(actionRow.p.id);
-                    setActionId(null);
-                  }}
-                />
-              )}
-              {!actionRow.st.onField && actionRow.st.availability === "available" && (
-                <SheetButton
-                  label="Won't go in right now"
-                  onClick={() => {
-                    onDecline(actionRow.p.id);
-                    setStagedIn((s) => s.filter((x) => x !== actionRow.p.id));
-                    setActionId(null);
-                  }}
-                />
-              )}
-              {actionRow.st.onField && (
-                <SheetButton
-                  label="Wrong kid — someone else went in"
-                  onClick={() => {
-                    setFixFor(actionRow.p.id);
-                    setActionId(null);
-                  }}
-                />
-              )}
-              {/* Played-time correction: labeled value with ± steppers, applied
-                  immediately — the sheet's total re-renders from the replayed
-                  state, so what the coach sees is what's recorded. */}
-              <div className="flex min-h-[52px] items-center justify-between rounded-[11px] border border-hairline2 bg-canvas px-3.5 py-2">
-                <div>
-                  <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">
-                    played total
-                  </div>
-                  <div className="text-[17px] font-extrabold tabular-nums">
-                    {fmtClock(actionRow.st.playedSec)}
-                  </div>
+            {/* Two columns, two jobs: actions on the left, the played-time
+                correction on the right with its steppers under the number —
+                not three full-width slabs in a stack. */}
+            <div className="flex items-stretch gap-2">
+              <div className="flex flex-1 flex-col gap-2">
+                {actionRow.st.availability === "declined_wait" && (
+                  <SheetButton
+                    label="Ready to play again"
+                    tone="good"
+                    onClick={() => {
+                      onMarkReady(actionRow.p.id);
+                      setActionId(null);
+                    }}
+                  />
+                )}
+                {!actionRow.st.onField && actionRow.st.availability === "available" && (
+                  <SheetButton
+                    label="Won't go in right now"
+                    onClick={() => {
+                      onDecline(actionRow.p.id);
+                      setStagedIn((s) => s.filter((x) => x !== actionRow.p.id));
+                      setActionId(null);
+                    }}
+                  />
+                )}
+                {actionRow.st.onField && (
+                  <SheetButton
+                    label="Wrong kid"
+                    onClick={() => {
+                      setFixFor(actionRow.p.id);
+                      setActionId(null);
+                    }}
+                  />
+                )}
+                {actionRow.st.availability !== "inactive" && (
+                  <SheetButton
+                    label="Left game"
+                    tone="danger"
+                    onClick={() => {
+                      setConfirmLeaveId(actionRow.p.id);
+                      setActionId(null);
+                    }}
+                  />
+                )}
+              </div>
+              {/* Played-time correction: applied immediately — the number
+                  re-renders from the replayed state, so what the coach sees
+                  is what's recorded. */}
+              <div className="flex-1 rounded-[11px] border border-hairline2 bg-canvas p-3">
+                <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">
+                  played total
                 </div>
-                <div className="flex items-center gap-1.5">
+                <div className="text-[24px] font-extrabold leading-tight tabular-nums">
+                  {fmtClock(actionRow.st.playedSec)}
+                </div>
+                <div className="mt-2 flex gap-1.5">
                   <button
                     type="button"
                     aria-label="subtract 30 seconds played"
                     onClick={() => onAdjustTime(actionRow.p.id, -30)}
-                    className="flex min-h-[44px] min-w-[56px] items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
                   >
                     −30s
                   </button>
@@ -683,30 +696,20 @@ export function LiveScreen({
                     type="button"
                     aria-label="add 30 seconds played"
                     onClick={() => onAdjustTime(actionRow.p.id, 30)}
-                    className="flex min-h-[44px] min-w-[56px] items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
+                    className="flex min-h-[44px] flex-1 items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
                   >
                     +30s
                   </button>
                 </div>
               </div>
-              {actionRow.st.availability !== "inactive" && (
-                <SheetButton
-                  label="Leaves the game (hurt / going home)"
-                  tone="danger"
-                  onClick={() => {
-                    setConfirmLeaveId(actionRow.p.id);
-                    setActionId(null);
-                  }}
-                />
-              )}
-              <button
-                type="button"
-                onClick={() => setActionId(null)}
-                className="min-h-[44px] text-[13px] font-semibold text-faintink"
-              >
-                Cancel
-              </button>
             </div>
+            <button
+              type="button"
+              onClick={() => setActionId(null)}
+              className="mt-2 min-h-[44px] w-full text-center text-[13px] font-semibold text-faintink"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
