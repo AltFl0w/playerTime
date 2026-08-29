@@ -1,6 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { engine } from "../engine";
-import type { GameConfig, GameState, Player, PlayerTimeState } from "../types";
+import {
+  SUB_GROUP_TOLERANCE_SEC,
+  type GameConfig,
+  type GameState,
+  type Player,
+  type PlayerTimeState,
+} from "../types";
 import { fmtClock } from "../lib/format";
 import { SunToggle } from "./bits";
 import { ConfirmSheet } from "./ConfirmSheet";
@@ -302,16 +308,20 @@ export function LiveScreen({
   // stint reaches the configured interval. Breaks freeze stints, never reset.
   const nextAlarmIn = nextSubInSec;
 
-  // The next swap, previewed: the biggest group that can rotate AT THE NEXT
-  // SUB TIME — eligibility is projected to the alarm (current stint + time
-  // until it), not this instant, or the forecast blanks out whenever fresh
-  // subs are still inside their shield. Purely a forecast (corner accent on
-  // the chips); staging stays 100% the coach's.
-  const projectedOut = engine
-    .rankOutCandidates(state, config)
-    .filter(
-      (c) => (state.players[c.playerId]?.currentStintSec ?? 0) + nextAlarmIn >= config.shieldSec,
-    );
+  // The next swap, previewed: who rides the NEXT BLOCK. A field kid is in the
+  // block if his own due (interval − stint) lands within the tolerance window
+  // of the earliest due, and he'll be past his shield when it rings. A kid
+  // off-rhythm (mid-block replacement) is excluded — he keeps his own
+  // countdown on his card instead. Purely a forecast (corner accent);
+  // staging stays 100% the coach's.
+  const remainOf = (id: string) =>
+    Math.max(0, config.subIntervalSec - (state.players[id]?.currentStintSec ?? 0));
+  const projectedOut = engine.rankOutCandidates(state, config).filter((c) => {
+    const st = state.players[c.playerId];
+    if (!st) return false;
+    const inBlock = remainOf(c.playerId) <= nextAlarmIn + SUB_GROUP_TOLERANCE_SEC;
+    return inBlock && st.currentStintSec + nextAlarmIn >= config.shieldSec;
+  });
   const nextAvailIn = engine.rankInCandidates(state);
   const nextSwapN = state.ended ? 0 : Math.min(projectedOut.length, nextAvailIn.length);
   const nextOutIds = new Set(projectedOut.slice(0, nextSwapN).map((c) => c.playerId));
@@ -398,7 +408,15 @@ export function LiveScreen({
                   <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
                 </>
               }
-              pill={p.id === suggestOutId ? "longest on" : null}
+              pill={
+                p.id === suggestOutId
+                  ? "longest on"
+                  : // Off-rhythm kid: not part of the next block, so his card
+                    // carries his own countdown — no guessing when he's due.
+                    !nextOutIds.has(p.id) && remainOf(p.id) > nextAlarmIn + SUB_GROUP_TOLERANCE_SEC
+                    ? `off in ${fmtClock(remainOf(p.id))}`
+                    : null
+              }
               hinted={nextOutIds.has(p.id)}
               onTap={() => toggleOut(p.id)}
               onLong={() => setActionId(p.id)}

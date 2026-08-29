@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engine } from "./engine";
-import type { GameEvent, GameState, PlayerId } from "./types";
+import { SUB_GROUP_TOLERANCE_SEC, type GameEvent, type GameState, type PlayerId } from "./types";
 import {
   emptyStore,
   loadStore,
@@ -338,8 +338,12 @@ export default function App() {
     if (forcedNow && !wasForced) {
       openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
     } else if (elapsedSec >= due) {
-      alarmDoneRef.current = due;
-      patchGame((g) => ({ ...g, alarmDoneAtSec: due }));
+      // One alarm per BLOCK, not per kid: dues within the tolerance window
+      // ride this alarm (they're the suggested group), so a kid 90 seconds
+      // behind the block doesn't ring his own follow-up siren. A kid further
+      // off-rhythm keeps his own due and rings when it actually arrives.
+      alarmDoneRef.current = due + SUB_GROUP_TOLERANCE_SEC;
+      patchGame((g) => ({ ...g, alarmDoneAtSec: due + SUB_GROUP_TOLERANCE_SEC }));
       openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

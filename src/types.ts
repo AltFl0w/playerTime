@@ -22,6 +22,11 @@ export interface GameConfig {
   shieldSec: number;
 }
 
+// Kids due within this window of each other sub as one block — a mid-block
+// replacement (potty break at 2:50) keeps his own clock instead of joining,
+// or resetting, everyone else's rhythm.
+export const SUB_GROUP_TOLERANCE_SEC = 120;
+
 export const DEFAULT_CONFIG: GameConfig = {
   playersOnField: 4,
   gameLengthSec: 40 * 60,
