@@ -423,13 +423,6 @@ export default function App() {
 
       {screen === "live" && game && (
         <>
-          {!alarm && (
-            <div className="mx-auto mb-3 max-w-md text-center">
-              <span className="text-xs font-bold uppercase tracking-widest text-neutral-400">
-                PlayerTime
-              </span>
-            </div>
-          )}
           <LiveScreen
             roster={store.roster}
             config={store.config}

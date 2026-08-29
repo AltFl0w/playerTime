@@ -109,7 +109,6 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
     ["sub every", `${Math.round(config.subIntervalSec / 60)}m`],
     ["max on", `${Math.round(config.maxStintSec / 60)}m`],
     ["min on", `${Math.round(config.shieldSec / 60)}m`],
-    ["display", sunMode ? "sun" : "normal"],
   ];
 
   const warnings: string[] = [];
@@ -128,7 +127,10 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
         <button type="button" onClick={onBackToSetup} className="px-1 py-1 text-base font-bold text-neutral-400">
           ← Roster
         </button>
-        <h1 className="text-xl font-extrabold">Game day</h1>
+        <div className="flex items-center gap-2.5">
+          <SunToggle on={sunMode} onToggle={onSunToggle} />
+          <h1 className="text-xl font-extrabold">Game day</h1>
+        </div>
       </header>
 
       <section>
@@ -241,14 +243,6 @@ export function PreGameScreen({ roster, config, onConfigChange, onStart, onBackT
             ))}
           </div>
         )}
-
-        <div className="mt-3 flex items-center justify-between gap-3 border-t border-hairline pt-3">
-          <div>
-            <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">Sun mode</div>
-            <div className="text-sm font-extrabold">High contrast outdoors</div>
-          </div>
-          <SunToggle on={sunMode} onToggle={onSunToggle} />
-        </div>
 
         {expanded && (
           <>

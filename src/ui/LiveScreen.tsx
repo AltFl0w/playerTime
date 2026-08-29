@@ -116,21 +116,6 @@ function Chip({
         staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       } ${dim ? "opacity-55" : ""}`}
     >
-      {staged ? (
-        <span
-          className={`absolute right-2.5 top-2.5 rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
-            stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
-          }`}
-        >
-          {stagedLabel}
-        </span>
-      ) : (
-        pill && (
-          <span className="absolute right-2.5 top-2.5 rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
-            {pill}
-          </span>
-        )
-      )}
       <span
         className={`font-semibold leading-[1.15] tracking-[-0.02em] ${
           big ? "text-[17px]" : "text-[15.5px]"
@@ -138,6 +123,23 @@ function Chip({
       >
         {player.name.split(" ")[0]}
       </span>
+      {/* Tags sit in-flow under the name — an overlaid pill covers the name
+          in narrow bench cells, and the name is the one thing a coach reads. */}
+      {staged ? (
+        <span
+          className={`rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
+            stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
+          }`}
+        >
+          {stagedLabel}
+        </span>
+      ) : (
+        pill && (
+          <span className="rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
+            {pill}
+          </span>
+        )
+      )}
       <span className="mt-auto text-[12.5px] tabular-nums text-mutedink">{time}</span>
     </button>
   );
