@@ -133,7 +133,7 @@ function Chip({
       {hinted && !staged && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute -left-px -top-px h-6 w-6 rounded-tl-xl border-l-2 border-t-2 ${
+          className={`pointer-events-none absolute -left-px -top-px h-6 w-6 rounded-tl-xl border-l-[3px] border-t-[3px] ${
             stagedLabel === "OFF" ? "border-stagedout" : "border-stagedin"
           }`}
         />
@@ -159,7 +159,13 @@ function Chip({
           </span>
         ) : (
           pill && (
-            <span className="shrink-0 rounded-full border border-hairline2 bg-canvas px-2 py-[2.5px] text-[10px] font-semibold tracking-[0.04em] text-mutedink">
+            // The name always wins the row: the tag caps at half the card and
+            // shrinks its type on small bench cells instead of hiding a kid.
+            <span
+              className={`max-w-[55%] truncate rounded-full border border-hairline2 bg-canvas py-[2.5px] font-semibold tracking-[0.04em] text-mutedink ${
+                big ? "px-2 text-[10px]" : "px-1.5 text-[8.5px]"
+              }`}
+            >
               {pill}
             </span>
           )
@@ -253,6 +259,19 @@ export function LiveScreen({
 
   const suggestOutId = engine.suggestOut(state, config);
   const suggestInId = engine.suggestIn(state, config);
+
+  // "longest on" claims a fact, but suggestOut ranks by FAIRNESS (ratio),
+  // which can top a kid who isn't the longest on at all — only show the tag
+  // when his stint really is the unique maximum on the field.
+  const suggestedOut = suggestOutId ? state.players[suggestOutId] : null;
+  const longestOnMeaningful =
+    !!suggestedOut &&
+    rows.every(
+      ({ p, st }) =>
+        !st.onField ||
+        p.id === suggestOutId ||
+        st.currentStintSec < suggestedOut.currentStintSec - 1,
+    );
 
   // "least played" only earns its ink when the suggested kid is the UNIQUE
   // minimum — if anyone else on the bench is tied with him (game start, fresh
@@ -411,7 +430,7 @@ export function LiveScreen({
                 </>
               }
               pill={
-                p.id === suggestOutId
+                p.id === suggestOutId && longestOnMeaningful
                   ? "longest on"
                   : // Off-rhythm kid: not part of the next block, so his card
                     // carries his own countdown — no guessing when he's due.
@@ -465,7 +484,7 @@ export function LiveScreen({
                     declined
                       ? "sat out"
                       : p.id === suggestInId && leastPlayedMeaningful
-                        ? "least played"
+                        ? "least"
                         : null
                   }
                   dim={declined}
