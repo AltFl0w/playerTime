@@ -103,19 +103,6 @@ export default function App() {
   const game = store.game;
   const events = game?.events ?? EMPTY_EVENTS;
 
-  // The sub clock is rolling, not absolute: the next alarm is one interval
-  // after the last line change (or the last alarm, whichever is later) — a
-  // manual sub at 24:20 means fresh legs, not "ring anyway at 25:00".
-  const lastSubAtSec = useMemo(() => {
-    let last = 0;
-    for (const e of events) {
-      if (e.type === "SUB_IN" || e.type === "SUB_OUT") last = Math.max(last, e.atSec);
-    }
-    return last;
-  }, [events]);
-  const nextSubDueSec =
-    Math.max(lastSubAtSec, game?.alarmDoneAtSec ?? 0) + Math.max(1, store.config.subIntervalSec);
-
   const baseState = useMemo(
     () => engine.computeState(events, store.config, store.roster),
     [events, store.config, store.roster],
@@ -199,6 +186,17 @@ export default function App() {
       store.roster,
     );
   }, [baseState, clockRunning, events, elapsedSec, store.config, store.roster]);
+
+  // Per-kid sub timing: each kid is due off when HIS stint reaches the
+  // configured interval. Breaks/pauses freeze stints without resetting them
+  // (a kid at 4:00 of a 5:00 interval is due 1:00 into the next quarter), and
+  // staggered subs produce staggered dues — the alarm tracks the earliest.
+  // dueK = elapsed + (interval − stint) is a constant game-time crossing.
+  const subIntervalSec = Math.max(1, store.config.subIntervalSec);
+  const fieldDueSecs = Object.values(state.players)
+    .filter((p) => p.onField)
+    .map((p) => elapsedSec + subIntervalSec - p.currentStintSec);
+  const nextSubDueSec = fieldDueSecs.length > 0 ? Math.min(...fieldDueSecs) : Infinity;
 
   useEffect(() => {
     if (screen !== "live" || !clockRunning) return;
@@ -331,7 +329,12 @@ export default function App() {
     if (alarmOpenRef.current) return;
     prevForcedRef.current = forcedNow;
 
-    const due = Math.max(lastSubAtSec, alarmDoneRef.current) + Math.max(1, store.config.subIntervalSec);
+    // Earliest crossing not yet alarmed. An ignored overdue kid stays excluded
+    // (his crossing is already ≤ alarmDone) so he can't re-ring forever, but
+    // the next kid to cross still fires — and the suggestion at that point
+    // naturally leads with whoever's been on longest.
+    const unalarmed = fieldDueSecs.filter((d) => d > alarmDoneRef.current);
+    const due = unalarmed.length > 0 ? Math.min(...unalarmed) : Infinity;
     if (forcedNow && !wasForced) {
       openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
     } else if (elapsedSec >= due) {
@@ -339,7 +342,8 @@ export default function App() {
       patchGame((g) => ({ ...g, alarmDoneAtSec: due }));
       openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
     }
-  }, [state, elapsedSec, screen, game, clockRunning, store.config, lastSubAtSec]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state, elapsedSec, screen, game, clockRunning, store.config]);
 
   // Shield nudges but never blanks the suggestion: with everyone fresh
   // (early game) fall back to the least-bad pull.
@@ -533,7 +537,9 @@ export default function App() {
                 { type: "ADJUST_TIME", atSec: currentElapsedSec(), playerId: id, deltaSec },
               ])
             }
-            nextSubInSec={Math.max(0, nextSubDueSec - elapsedSec)}
+            nextSubInSec={
+              Number.isFinite(nextSubDueSec) ? Math.max(0, nextSubDueSec - elapsedSec) : subIntervalSec
+            }
             canUndo={!alarm && lastUndoableSlice(events) !== null}
             onUndo={undoLast}
             sunMode={store.sunMode}

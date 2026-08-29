@@ -298,8 +298,8 @@ export function LiveScreen({
   const quarterLenSec = Math.max(1, Math.round(config.gameLengthSec / Math.max(1, config.quarterCount)));
   const intoQuarter = elapsedSec - (quarter - 1) * quarterLenSec;
   const quarterLeft = Math.max(0, quarterLenSec - intoQuarter);
-  // Rolling sub clock, supplied by App: one interval after the last line
-  // change (or last alarm), not the next absolute multiple of game time.
+  // Per-kid sub clock, supplied by App: time until the earliest field kid's
+  // stint reaches the configured interval. Breaks freeze stints, never reset.
   const nextAlarmIn = nextSubInSec;
 
   // The next swap, previewed: the biggest group that can rotate AT THE NEXT
