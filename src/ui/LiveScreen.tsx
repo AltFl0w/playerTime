@@ -120,13 +120,14 @@ function Chip({
         staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       } ${dim ? "opacity-55" : ""}`}
     >
-      {/* Next-swap forecast: a quiet accent tick in the free corner — reads
-          at a glance without looking like a selection. */}
+      {/* Next-swap forecast: a thin colored arc hugging the top-left corner,
+          tracing the card's own radius — glanceable, but nothing like the
+          filled look of a real selection. */}
       {hinted && !staged && (
         <span
           aria-hidden="true"
-          className={`absolute right-2.5 top-2.5 h-[5px] w-5 rounded-full ${
-            stagedLabel === "OFF" ? "bg-stagedout-line" : "bg-stagedin-line"
+          className={`pointer-events-none absolute -left-px -top-px h-6 w-6 rounded-tl-xl border-l-2 border-t-2 ${
+            stagedLabel === "OFF" ? "border-stagedout" : "border-stagedin"
           }`}
         />
       )}
