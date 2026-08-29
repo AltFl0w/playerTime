@@ -176,17 +176,19 @@ function SheetButton({
   tone?: "plain" | "good" | "danger";
   onClick: () => void;
 }) {
+  // Bordered fills: on the white sheet, an unbordered near-white row reads as
+  // loose text, not a button — every action must look pressable.
   const cls =
     tone === "good"
-      ? "bg-stagedin-soft text-stagedin"
+      ? "border-stagedin-line bg-stagedin-soft text-stagedin"
       : tone === "danger"
-        ? "bg-stagedout-soft text-stagedout"
-        : "bg-canvas text-ink";
+        ? "border-stagedout-line bg-stagedout-soft text-stagedout"
+        : "border-hairline2 bg-canvas text-ink";
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`min-h-[52px] rounded-[11px] text-[15px] font-semibold active:scale-[0.98] ${cls}`}
+      className={`min-h-[52px] rounded-[11px] border text-[15px] font-semibold active:scale-[0.98] ${cls}`}
     >
       {label}
     </button>
@@ -345,15 +347,13 @@ export function LiveScreen({
           </span>
         </div>
         <div className="flex items-center gap-2.5">
-          <div className="flex items-baseline gap-1.5">
-            <span className="text-[13px] font-semibold tracking-[0.02em] text-faintink">
-              Q{quarter}
+          {/* Same stacked shape as NEXT SUB: label on top, number under it. */}
+          <div className="flex flex-col items-end gap-1">
+            <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
+              Q{quarter} · {clockRunning ? "LEFT" : atBreak ? "BREAK" : "PAUSED"}
             </span>
             <span className="text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums text-neutral-400">
               {atBreak || state.ended ? "0:00" : fmtClock(quarterLeft)}
-            </span>
-            <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
-              {clockRunning ? "LEFT" : atBreak ? "BREAK" : "PAUSED"}
             </span>
           </div>
           <button
@@ -583,7 +583,7 @@ export function LiveScreen({
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex flex-col gap-2">
-              <div className="flex min-h-[44px] items-center justify-between rounded-[11px] bg-canvas px-3.5">
+              <div className="flex min-h-[44px] items-center justify-between rounded-[11px] border border-hairline2 bg-canvas px-3.5">
                 <span className="text-[15px] font-semibold">Sun mode</span>
                 <SunToggle on={sunMode} onToggle={onSunToggle} />
               </div>
@@ -614,8 +614,19 @@ export function LiveScreen({
             className="w-full rounded-t-2xl border-t border-hairline bg-card p-4 pb-[max(1rem,env(safe-area-inset-bottom))]"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 text-[17px] font-semibold tracking-[-0.02em]">
-              {actionRow.p.name.split(" ")[0]}
+            {/* Who + where: the coach long-pressed a face, the sheet confirms
+                it and anchors every action below to that kid. */}
+            <div className="mb-3 flex items-baseline justify-between border-b border-hairline pb-3">
+              <span className="text-[20px] font-bold tracking-[-0.02em]">
+                {actionRow.p.name.split(" ")[0]}
+              </span>
+              <span className="text-[12px] font-semibold text-mutedink">
+                {actionRow.st.onField
+                  ? `on field · ${fmtClock(actionRow.st.currentStintSec)} this stint`
+                  : actionRow.st.availability === "declined_wait"
+                    ? "bench · sitting out"
+                    : `bench · ${fmtClock(actionRow.st.playedSec)} played`}
+              </span>
             </div>
             <div className="flex flex-col gap-2">
               {actionRow.st.availability === "declined_wait" && (
@@ -650,12 +661,12 @@ export function LiveScreen({
               {/* Played-time correction: labeled value with ± steppers, applied
                   immediately — the sheet's total re-renders from the replayed
                   state, so what the coach sees is what's recorded. */}
-              <div className="flex min-h-[52px] items-center justify-between rounded-[11px] bg-canvas px-3.5">
+              <div className="flex min-h-[52px] items-center justify-between rounded-[11px] border border-hairline2 bg-canvas px-3.5 py-2">
                 <div>
                   <div className="text-[9px] font-bold uppercase tracking-wider text-neutral-400">
-                    played
+                    played total
                   </div>
-                  <div className="text-[15px] font-extrabold tabular-nums">
+                  <div className="text-[17px] font-extrabold tabular-nums">
                     {fmtClock(actionRow.st.playedSec)}
                   </div>
                 </div>
@@ -664,7 +675,7 @@ export function LiveScreen({
                     type="button"
                     aria-label="subtract 30 seconds played"
                     onClick={() => onAdjustTime(actionRow.p.id, -30)}
-                    className="flex min-h-[44px] min-w-[52px] items-center justify-center rounded-[9px] bg-card text-[13px] font-bold shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.96]"
+                    className="flex min-h-[44px] min-w-[56px] items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
                   >
                     −30s
                   </button>
@@ -672,23 +683,21 @@ export function LiveScreen({
                     type="button"
                     aria-label="add 30 seconds played"
                     onClick={() => onAdjustTime(actionRow.p.id, 30)}
-                    className="flex min-h-[44px] min-w-[52px] items-center justify-center rounded-[9px] bg-card text-[13px] font-bold shadow-[0_1px_2px_rgba(0,0,0,0.06)] active:scale-[0.96]"
+                    className="flex min-h-[44px] min-w-[56px] items-center justify-center rounded-[9px] border border-hairline2 bg-card text-[13px] font-bold active:scale-[0.96]"
                   >
                     +30s
                   </button>
                 </div>
               </div>
               {actionRow.st.availability !== "inactive" && (
-                <button
-                  type="button"
+                <SheetButton
+                  label="Leaves the game (hurt / going home)"
+                  tone="danger"
                   onClick={() => {
                     setConfirmLeaveId(actionRow.p.id);
                     setActionId(null);
                   }}
-                  className="min-h-[44px] text-[13px] font-semibold text-stagedout active:scale-[0.98]"
-                >
-                  Leaves the game (hurt / going home)
-                </button>
+                />
               )}
               <button
                 type="button"
