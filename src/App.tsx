@@ -201,7 +201,17 @@ export default function App() {
   }
 
   function pushEvents(newEvents: GameEvent[]) {
-    patchGame((g) => ({ ...g, events: [...g.events, ...newEvents] }));
+    // Invariant: while the clock runs, runningSinceMs is the wall instant of
+    // the LAST event in the log. Appended events are stamped "as of now", so
+    // the replayed elapsed advances to this instant — the wall offset must
+    // restart here too, or the open segment is counted twice. (This was the
+    // game-clock jumping forward on every sub.)
+    const t = Date.now();
+    patchGame((g) => ({
+      ...g,
+      events: [...g.events, ...newEvents],
+      runningSinceMs: g.runningSinceMs == null ? null : t,
+    }));
   }
 
   function startGame(presentIds: string[]) {
@@ -362,7 +372,15 @@ export default function App() {
     if (!game || alarm) return;
     const result = undoLastCoachAction(game);
     if (!result) return;
-    patchGame(() => result.game);
+    // Removing events rewinds the replayed elapsed, but real game time hasn't
+    // moved — backdate the anchor so replay + wall offset still sum to now.
+    const trueElapsed = currentElapsedSec();
+    patchGame(() => {
+      const g = result.game;
+      if (g.runningSinceMs == null) return g;
+      const replayed = engine.computeState(g.events, store.config, store.roster).elapsedSec;
+      return { ...g, runningSinceMs: Date.now() - Math.max(0, trueElapsed - replayed) * 1000 };
+    });
     showToast(formatUndone(result.undone, (id) => byId.get(id)?.name ?? ""));
   }
 

@@ -117,15 +117,19 @@ function Chip({
       className={`relative flex flex-col items-start gap-[3px] rounded-xl border px-[13px] pb-[11px] pt-[13px] text-left active:scale-[0.98] ${
         big ? "min-h-[98px]" : "min-h-[92px]"
       } ${
-        staged
-          ? stagedCls
-          : hinted
-            ? `border-dashed bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)] ${
-                stagedLabel === "OFF" ? "border-stagedout-line" : "border-stagedin-line"
-              }`
-            : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+        staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       } ${dim ? "opacity-55" : ""}`}
     >
+      {/* Next-swap forecast: a quiet accent tick in the free corner — reads
+          at a glance without looking like a selection. */}
+      {hinted && !staged && (
+        <span
+          aria-hidden="true"
+          className={`absolute right-2.5 top-2.5 h-[5px] w-5 rounded-full ${
+            stagedLabel === "OFF" ? "bg-stagedout-line" : "bg-stagedin-line"
+          }`}
+        />
+      )}
       <span
         className={`font-semibold leading-[1.15] tracking-[-0.02em] ${
           big ? "text-[17px]" : "text-[15.5px]"
@@ -236,25 +240,17 @@ export function LiveScreen({
   const suggestOutId = engine.suggestOut(state, config);
   const suggestInId = engine.suggestIn(state, config);
 
-  // The next swap, previewed: the biggest group that could rotate at the next
-  // sub alarm — every shield-eligible field kid paired with a bench kid, both
-  // sides in the engine's own priority order. Purely a forecast (soft dashed
-  // outline on the chips); staging stays 100% the coach's.
-  const nextEligibleOut = engine.rankOutCandidates(state, config).filter((c) => c.eligible);
-  const nextAvailIn = engine.rankInCandidates(state);
-  const nextSwapN = state.ended ? 0 : Math.min(nextEligibleOut.length, nextAvailIn.length);
-  const nextOutIds = new Set(nextEligibleOut.slice(0, nextSwapN).map((c) => c.playerId));
-  const nextInIds = new Set(nextAvailIn.slice(0, nextSwapN).map((c) => c.playerId));
-  // "least played" is only information when someone else has actually played
-  // more — with the whole bench tied (game start, fresh quarter after a full
-  // rotation) the tag is just noise on an arbitrary kid.
+  // "least played" only earns its ink when the suggested kid is the UNIQUE
+  // minimum — if anyone else on the bench is tied with him (game start, fresh
+  // rotation), the tag is the engine's arbitrary tiebreak, not information.
   const suggestedIn = suggestInId ? state.players[suggestInId] : null;
   const leastPlayedMeaningful =
     !!suggestedIn &&
-    rows.some(
-      ({ st }) =>
-        !st.onField &&
-        st.availability === "available" &&
+    rows.every(
+      ({ p, st }) =>
+        st.onField ||
+        st.availability !== "available" ||
+        p.id === suggestInId ||
         st.playedSec > suggestedIn.playedSec + 1,
     );
 
@@ -303,6 +299,21 @@ export function LiveScreen({
     0,
     (Math.floor(elapsedSec / config.subIntervalSec) + 1) * config.subIntervalSec - elapsedSec,
   );
+
+  // The next swap, previewed: the biggest group that can rotate AT THE NEXT
+  // SUB TIME — eligibility is projected to the alarm (current stint + time
+  // until it), not this instant, or the forecast blanks out whenever fresh
+  // subs are still inside their shield. Purely a forecast (corner accent on
+  // the chips); staging stays 100% the coach's.
+  const projectedOut = engine
+    .rankOutCandidates(state, config)
+    .filter(
+      (c) => (state.players[c.playerId]?.currentStintSec ?? 0) + nextAlarmIn >= config.shieldSec,
+    );
+  const nextAvailIn = engine.rankInCandidates(state);
+  const nextSwapN = state.ended ? 0 : Math.min(projectedOut.length, nextAvailIn.length);
+  const nextOutIds = new Set(projectedOut.slice(0, nextSwapN).map((c) => c.playerId));
+  const nextInIds = new Set(nextAvailIn.slice(0, nextSwapN).map((c) => c.playerId));
 
   const actionRow = actionId ? rows.find((r) => r.p.id === actionId) ?? null : null;
   const fixRow = fixFor ? rows.find((r) => r.p.id === fixFor) ?? null : null;
