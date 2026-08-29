@@ -42,23 +42,29 @@ export default function App() {
         : "pregame",
   );
   const [now, setNow] = useState(() => Date.now());
-  const [alarm, setAlarm] = useState<LiveAlarm | null>(null);
+  // Restore an alarm that was showing when the app was refreshed/relaunched —
+  // the banner comes back; sound waits for the next gesture (iOS rule anyway).
+  const [alarm, setAlarm] = useState<LiveAlarm | null>(() => store.game?.alarm ?? null);
   const [toast, setToast] = useState<{ id: number; text: string } | null>(null);
   const toastTimerRef = useRef<number | null>(null);
   const intervalFiredRef = useRef<number>(
-    Math.floor(
-      (store.game?.events.length ?? 0) > 0
-        ? (engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
-            .elapsedSec +
-            (store.game?.runningSinceMs
-              ? Math.max(0, Math.floor((Date.now() - store.game.runningSinceMs) / 1000))
-              : 0)) /
-            Math.max(1, store.config.subIntervalSec)
-        : 0,
-    ),
+    // Persisted value wins: the elapsed-derived fallback assumes every past
+    // interval already rang, which silently swallows an alarm that was open
+    // (or due) at the moment of a refresh.
+    store.game?.intervalFired ??
+      Math.floor(
+        (store.game?.events.length ?? 0) > 0
+          ? (engine.computeState(store.game?.events ?? EMPTY_EVENTS, store.config, store.roster)
+              .elapsedSec +
+              (store.game?.runningSinceMs
+                ? Math.max(0, Math.floor((Date.now() - store.game.runningSinceMs) / 1000))
+                : 0)) /
+              Math.max(1, store.config.subIntervalSec)
+          : 0,
+      ),
   );
   const prevForcedRef = useRef(false);
-  const alarmOpenRef = useRef(false);
+  const alarmOpenRef = useRef(!!store.game?.alarm);
 
   function showToast(text: string) {
     if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
@@ -162,7 +168,15 @@ export default function App() {
         Math.floor(boundary / Math.max(1, store.config.subIntervalSec)),
       );
       pushEvents([{ type: "PAUSE", atSec: boundary }]);
-      patchGame((g) => ({ ...g, runningSinceMs: null }));
+      patchGame((g) => ({
+        ...g,
+        runningSinceMs: null,
+        alarm: null,
+        intervalFired: Math.max(
+          g.intervalFired ?? 0,
+          Math.floor(boundary / Math.max(1, store.config.subIntervalSec)),
+        ),
+      }));
     }
   });
 
@@ -255,7 +269,14 @@ export default function App() {
     alarmOpenRef.current = false;
     setStore((s) => ({
       ...s,
-      game: { events: evts, runningSinceMs: t, startedAtMs: t, pendingSwaps: [] },
+      game: {
+        events: evts,
+        runningSinceMs: t,
+        startedAtMs: t,
+        pendingSwaps: [],
+        intervalFired: 0,
+        alarm: null,
+      },
     }));
     setNow(t);
     setScreen("live");
@@ -282,7 +303,7 @@ export default function App() {
     setAlarm(null);
     alarmOpenRef.current = false;
     pushEvents([{ type: "END", atSec: currentElapsedSec() }]);
-    patchGame((g) => ({ ...g, runningSinceMs: null }));
+    patchGame((g) => ({ ...g, runningSinceMs: null, alarm: null }));
     setScreen("report");
   }
 
@@ -307,6 +328,7 @@ export default function App() {
       openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
     } else if (idx > intervalFiredRef.current) {
       intervalFiredRef.current = idx;
+      patchGame((g) => ({ ...g, intervalFired: idx }));
       openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
     }
   }, [state, elapsedSec, screen, game, clockRunning, store.config]);
@@ -325,6 +347,7 @@ export default function App() {
   function openAlarm(a: LiveAlarm) {
     alarmOpenRef.current = true;
     setAlarm(a);
+    patchGame((g) => ({ ...g, alarm: a }));
     startAlarm();
   }
 
@@ -333,6 +356,7 @@ export default function App() {
     stopAlarm();
     unlockAudio();
     setAlarm(null);
+    patchGame((g) => ({ ...g, alarm: null }));
   }
 
   // One batch for a whole line change: all OUTs then all INs at this second.
@@ -367,18 +391,29 @@ export default function App() {
   // did. Rewrite his most recent SUB_IN to the right kid; the engine replay
   // moves the whole stint's minutes automatically.
   function fixMistake(wrongId: PlayerId, rightId: PlayerId) {
-    patchGame((g) => {
-      const idx = [...g.events]
-        .map((e, i) => ({ e, i }))
-        .filter(({ e }) => e.type === "SUB_IN" && e.playerId === wrongId)
-        .map(({ i }) => i)
-        .pop();
-      if (idx === undefined) return g;
-      const events = g.events.map((e, i) =>
-        i === idx && e.type === "SUB_IN" ? { ...e, playerId: rightId } : e,
+    if (!game) return;
+    const idx = [...game.events]
+      .map((e, i) => ({ e, i }))
+      .filter(({ e }) => e.type === "SUB_IN" && e.playerId === wrongId)
+      .map(({ i }) => i)
+      .pop();
+    if (idx === undefined) return;
+    // "On the bench now" isn't "on the bench then": if the named kid was on
+    // the field at that SUB_IN, the rewrite replays as a no-op and his later
+    // SUB_OUT empties the slot — the stint's minutes silently vanish.
+    const then = engine.computeState(game.events.slice(0, idx), store.config, store.roster);
+    if (then.players[rightId]?.onField) {
+      showToast(
+        `${byId.get(rightId)?.name.split(" ")[0] ?? "They"} was on the field then — pick who was on the bench`,
       );
-      return { ...g, events };
-    });
+      return;
+    }
+    patchGame((g) => ({
+      ...g,
+      events: g.events.map((e, i) =>
+        i === idx && e.type === "SUB_IN" ? { ...e, playerId: rightId } : e,
+      ),
+    }));
     showToast(
       `Fixed — that was ${byId.get(rightId)?.name.split(" ")[0] ?? "them"}, not ${byId.get(wrongId)?.name.split(" ")[0] ?? ""}`,
     );
