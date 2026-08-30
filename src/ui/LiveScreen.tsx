@@ -283,24 +283,35 @@ export function LiveScreen({
 
   return (
     <div
-      className="flex flex-col gap-5"
-      onPointerDownCapture={alarm ? onDismissAlarm : undefined}
+      className="flex min-h-full flex-col gap-5"
+      onPointerDownCapture={() => {
+        if (alarm) onDismissAlarm();
+      }}
+      onTouchStartCapture={() => {
+        if (alarm) onDismissAlarm();
+      }}
     >
-      {/* Header: NEXT SUB is the star — big and black. The quarter clock sits
-          right at the same size in lighter gray: big and legible, not
-          competing. Game total lives at the very bottom under the dock. */}
+      {/* Header: NEXT SUB is the star. When the alarm is live it turns red
+          and says NOW — that's the visual, not a flash. Tap anywhere mutes. */}
       <div className="-mx-4 flex items-end justify-between border-b border-hairline px-5 pb-4">
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
-            NEXT SUB
+          <span
+            className={`text-[11px] font-semibold tracking-[0.05em] ${
+              alarm ? "text-stagedout" : "text-faintink"
+            }`}
+          >
+            {alarm ? "SUB NOW" : "NEXT SUB"}
           </span>
           <span
             className={`text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums ${
-              clockRunning ? "text-ink" : "text-neutral-400"
+              alarm ? "text-stagedout" : clockRunning ? "text-ink" : "text-neutral-400"
             }`}
           >
-            {fmtClock(nextAlarmIn)}
+            {alarm ? "NOW" : fmtClock(nextAlarmIn)}
           </span>
+          {alarm && (
+            <span className="pt-1 text-[12px] font-medium text-stagedout">tap anywhere to mute</span>
+          )}
         </div>
         <div className="flex items-center gap-2.5">
           {/* Same stacked shape as NEXT SUB: label on top, number under it. */}
@@ -451,7 +462,7 @@ export function LiveScreen({
               e.stopPropagation();
               onDismissAlarm();
             }}
-            className="mb-2 flex min-h-[52px] w-full items-center justify-center rounded-[11px] border border-hairline2 bg-card text-[15px] font-semibold text-ink active:scale-[0.96]"
+            className="mb-2 flex min-h-[52px] w-full items-center justify-center rounded-[11px] border-2 border-stagedout bg-card text-[15px] font-semibold text-stagedout active:scale-[0.96]"
           >
             Mute
           </button>
