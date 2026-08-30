@@ -365,9 +365,14 @@ export default function App() {
   function dismissAlarm() {
     alarmOpenRef.current = false;
     stopAlarm();
-    unlockAudio();
+    // Pin the current due so mute cannot immediately re-arm the same window.
+    alarmDoneRef.current = Math.max(alarmDoneRef.current, nextSubDueSec, elapsedSec);
     setAlarm(null);
-    patchGame((g) => ({ ...g, alarm: null }));
+    patchGame((g) => ({
+      ...g,
+      alarm: null,
+      alarmDoneAtSec: alarmDoneRef.current,
+    }));
   }
 
   // One batch for a whole line change: all OUTs then all INs at this second.

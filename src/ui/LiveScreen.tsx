@@ -84,7 +84,6 @@ function Chip({
   pill,
   dim,
   hinted,
-  flash,
   onTap,
   onLong,
   big,
@@ -97,7 +96,6 @@ function Chip({
   dim?: boolean;
   /** Next-swap forecast: colored corner only, never a selection. */
   hinted?: boolean;
-  flash?: "in" | "out" | null;
   onTap: () => void;
   onLong: () => void;
   big?: boolean;
@@ -106,7 +104,6 @@ function Chip({
   const isOff = stagedLabel === "OFF";
   const colorCls = isOff ? "border-stagedout" : "border-stagedin";
   const nameCls = staged ? (isOff ? "text-stagedout" : "text-stagedin") : "text-ink";
-  const flashCls = flash === "in" ? "pt-just-in" : flash === "out" ? "pt-just-out" : "";
   return (
     <button
       type="button"
@@ -116,7 +113,7 @@ function Chip({
         big ? "min-h-[98px]" : "min-h-[92px]"
       } ${
         staged ? colorCls : "border-hairline2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-      } ${dim ? "opacity-55" : ""} ${flashCls}`}
+      } ${dim ? "opacity-55" : ""}`}
     >
       {hinted && !staged && (
         <span
@@ -218,8 +215,6 @@ export function LiveScreen({
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
-  const [flash, setFlash] = useState<Record<string, "in" | "out">>({});
-  const flashTimer = useRef<number | null>(null);
 
   const byId = new Map(roster.map((p) => [p.id, p]));
   const rows: Row[] = [];
@@ -266,12 +261,6 @@ export function LiveScreen({
 
   function applyStaged() {
     if (outN + inN === 0 || overCap) return;
-    const next: Record<string, "in" | "out"> = {};
-    for (const id of stagedOut) next[id] = "out";
-    for (const id of stagedIn) next[id] = "in";
-    if (flashTimer.current) window.clearTimeout(flashTimer.current);
-    setFlash(next);
-    flashTimer.current = window.setTimeout(() => setFlash({}), 700);
     onApplyChange(stagedOut, stagedIn);
     clearStaged();
     if (alarm) onDismissAlarm();
@@ -293,7 +282,10 @@ export function LiveScreen({
   const fixRow = fixFor ? rows.find((r) => r.p.id === fixFor) ?? null : null;
 
   return (
-    <div className="flex flex-col gap-5">
+    <div
+      className="flex flex-col gap-5"
+      onPointerDownCapture={alarm ? onDismissAlarm : undefined}
+    >
       {/* Header: NEXT SUB is the star — big and black. The quarter clock sits
           right at the same size in lighter gray: big and legible, not
           competing. Game total lives at the very bottom under the dock. */}
@@ -373,7 +365,6 @@ export function LiveScreen({
               }
               pill={null}
               hinted={nextOutIds.has(p.id)}
-              flash={flash[p.id] ?? null}
               onTap={() => toggleOut(p.id)}
               onLong={() => setActionId(p.id)}
             />
@@ -418,7 +409,6 @@ export function LiveScreen({
                   pill={declined ? "sat out" : null}
                   dim={declined}
                   hinted={nextInIds.has(p.id)}
-                  flash={flash[p.id] ?? null}
                   onTap={() => toggleIn(p.id)}
                   onLong={() => setActionId(p.id)}
                 />
@@ -453,10 +443,17 @@ export function LiveScreen({
         {alarm && (
           <button
             type="button"
-            onClick={onDismissAlarm}
-            className="pt-banner mb-2 flex min-h-[44px] w-full items-center justify-center rounded-[11px] bg-ink text-[14px] font-semibold text-white active:scale-[0.99]"
+            onPointerDown={(e) => {
+              e.stopPropagation();
+              onDismissAlarm();
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDismissAlarm();
+            }}
+            className="mb-2 flex min-h-[52px] w-full items-center justify-center rounded-[11px] border border-hairline2 bg-card text-[15px] font-semibold text-ink active:scale-[0.96]"
           >
-            Sub window · tap to mute
+            Mute
           </button>
         )}
         {outN + inN > 0 ? (

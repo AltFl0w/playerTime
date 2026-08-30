@@ -1,10 +1,8 @@
 // Sideline alarm: a two-tone double-beep WAV played through an <audio>
-// element on a loop until dismissed, vibration attempt (guarded — iOS Safari
-// has no navigator.vibrate). No screen flash — the alarm banner is the visual.
-// plus theme-color flash. <audio> element playback (unlike WebAudio) still
-// sounds on iOS when the ringer switch is set to silent — WebAudio is gated
-// by the silent switch, so we never use it. Changing `src` on a primed
-// element drops the iOS unlock, so sun vs default are two separate elements
+// element on a loop until muted. Vibration attempt is guarded — iOS Safari
+// has no navigator.vibrate. No screen flash. <audio> still sounds on iOS
+// when the ringer switch is silent (WebAudio does not). Changing `src` on a
+// primed element drops the iOS unlock, so sun vs default are two elements
 // created once and never recreated / load()'d.
 
 let loop: ReturnType<typeof setInterval> | null = null;
@@ -21,10 +19,6 @@ const TONE_2_HZ = 1320;
 const DEFAULT_AMP = 0.55;
 const SUN_AMP = 0.72;
 const LOOP_MS = 1200;
-
-const ALARM_THEME = "#171717";
-const IDLE_THEME_SUN = "#ffffff";
-const IDLE_THEME = "#fafafa";
 
 // Builds a short double-beep (square-ish 880Hz then 1320Hz) as a 16-bit PCM
 // WAV data URI, with quick attack/release envelopes to avoid clicks.
@@ -107,24 +101,6 @@ function chosenEl(): HTMLAudioElement {
   return sun ? ensureSunEl() : ensureDefaultEl();
 }
 
-function getOrCreateMeta(name: string): HTMLMetaElement {
-  let el = document.querySelector(`meta[name="${name}"]`) as HTMLMetaElement | null;
-  if (!el) {
-    el = document.createElement("meta");
-    el.setAttribute("name", name);
-    document.head.appendChild(el);
-  }
-  return el;
-}
-
-function setThemeColor(content: string): void {
-  getOrCreateMeta("theme-color").setAttribute("content", content);
-}
-
-function setStatusBarStyle(content: string): void {
-  getOrCreateMeta("apple-mobile-web-app-status-bar-style").setAttribute("content", content);
-}
-
 function hush(el: HTMLAudioElement | null): void {
   if (!el) return;
   try {
@@ -192,8 +168,6 @@ function beepTwice(): void {
 
 export function startAlarm(): void {
   stopAlarm();
-  setThemeColor(ALARM_THEME);
-  setStatusBarStyle("black");
   beepTwice();
   loop = setInterval(beepTwice, LOOP_MS);
 }
@@ -205,7 +179,4 @@ export function stopAlarm(): void {
   }
   hush(defaultEl);
   hush(sunEl);
-  const sun = document.documentElement.classList.contains("pt-sun");
-  setThemeColor(sun ? IDLE_THEME_SUN : IDLE_THEME);
-  setStatusBarStyle("default");
 }
