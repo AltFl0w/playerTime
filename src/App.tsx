@@ -217,7 +217,7 @@ export default function App() {
   // line change. Leftover kids do not drag it to 0:00. Pause freezes elapsed
   // so the number holds instead of going blank.
   const subIntervalSec = Math.max(1, store.config.subIntervalSec);
-  const shiftStartedAtSec = game?.shiftStartedAtSec ?? 0;
+  const shiftStartedAtSec = game?.shiftStartedAtSec ?? lastAppliedShiftSec(events);
   const nextSubDueSec = shiftStartedAtSec + subIntervalSec;
   const nextSubInSec = Math.max(0, nextSubDueSec - elapsedSec);
 
