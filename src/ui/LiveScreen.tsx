@@ -84,6 +84,7 @@ function Chip({
   pill,
   dim,
   hinted,
+  flash,
   onTap,
   onLong,
   big,
@@ -96,45 +97,40 @@ function Chip({
   dim?: boolean;
   /** Soft forecast of the next swap: dashed outline only, never a selection. */
   hinted?: boolean;
+  flash?: "in" | "out" | null;
   onTap: () => void;
   onLong: () => void;
   big?: boolean;
 }) {
   const lp = useLongPress(onLong);
-  const stagedCls =
-    stagedLabel === "OFF"
-      ? "border-stagedout-line bg-stagedout-soft"
-      : "border-stagedin-line bg-stagedin-soft";
-  const nameCls = staged
-    ? stagedLabel === "OFF"
-      ? "text-stagedout"
-      : "text-stagedin"
-    : "text-ink";
+  const isOff = stagedLabel === "OFF";
+  const stagedCls = isOff
+    ? "border-stagedout bg-stagedout-soft"
+    : "border-stagedin bg-stagedin-soft";
+  const hintCls = isOff ? "border-stagedout" : "border-stagedin";
+  const nameCls = staged ? (isOff ? "text-stagedout" : "text-stagedin") : "text-ink";
+  const flashCls = flash === "in" ? "pt-just-in" : flash === "out" ? "pt-just-out" : "";
   return (
     <button
       type="button"
       {...lp}
       onClick={onTap}
-      className={`relative flex flex-col items-start gap-[3px] rounded-xl border px-[13px] pb-[11px] pt-[13px] text-left active:scale-[0.98] ${
+      className={`relative flex flex-col items-start gap-[3px] rounded-xl border-2 px-[13px] pb-[11px] pt-[13px] text-left transition-[border-color,background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${
         big ? "min-h-[98px]" : "min-h-[92px]"
       } ${
-        staged ? stagedCls : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
-      } ${dim ? "opacity-55" : ""}`}
+        staged
+          ? stagedCls
+          : hinted
+            ? `border-dashed bg-card ${hintCls}`
+            : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+      } ${dim ? "opacity-55" : ""} ${flashCls}`}
     >
-      {/* Next-swap forecast: a thin colored arc hugging the top-left corner,
-          tracing the card's own radius — glanceable, but nothing like the
-          filled look of a real selection. */}
       {hinted && !staged && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute -left-px -top-px h-6 w-6 rounded-tl-xl border-l-[3px] border-t-[3px] ${
-            stagedLabel === "OFF" ? "border-stagedout" : "border-stagedin"
-          }`}
+          className={`pointer-events-none absolute -left-[2px] -top-[2px] h-8 w-8 rounded-tl-xl border-l-[4px] border-t-[4px] ${hintCls}`}
         />
       )}
-      {/* Name owns the left, tag sits top-right in the SAME row — under the
-          name is the busiest spot on the card, and inline-right can't cover
-          the name the way an absolute overlay did (the name just truncates). */}
       <div className="flex w-full items-start justify-between gap-1">
         <span
           className={`min-w-0 truncate font-semibold leading-[1.15] tracking-[-0.02em] ${
@@ -146,15 +142,13 @@ function Chip({
         {staged ? (
           <span
             className={`shrink-0 rounded-full px-[9px] py-[3px] text-[10px] font-bold tracking-[0.05em] text-white ${
-              stagedLabel === "OFF" ? "bg-stagedout" : "bg-stagedin"
+              isOff ? "bg-stagedout" : "bg-stagedin"
             }`}
           >
             {stagedLabel}
           </span>
         ) : (
           pill && (
-            // The name always wins the row: the tag caps at half the card and
-            // shrinks its type on small bench cells instead of hiding a kid.
             <span
               className={`max-w-[55%] truncate rounded-full border border-hairline2 bg-canvas py-[2.5px] font-semibold tracking-[0.04em] text-mutedink ${
                 big ? "px-2 text-[10px]" : "px-1.5 text-[8.5px]"
@@ -165,7 +159,9 @@ function Chip({
           )
         )}
       </div>
-      <span className="mt-auto text-[12.5px] tabular-nums text-mutedink">{time}</span>
+      <span className={`mt-auto text-[12.5px] tabular-nums ${staged ? nameCls : "text-mutedink"}`}>
+        {time}
+      </span>
     </button>
   );
 }
@@ -231,6 +227,8 @@ export function LiveScreen({
   const [confirmEnd, setConfirmEnd] = useState(false);
   const [confirmLeaveId, setConfirmLeaveId] = useState<string | null>(null);
   const [overflowOpen, setOverflowOpen] = useState(false);
+  const [flash, setFlash] = useState<Record<string, "in" | "out">>({});
+  const flashTimer = useRef<number | null>(null);
 
   const byId = new Map(roster.map((p) => [p.id, p]));
   const rows: Row[] = [];
@@ -277,6 +275,12 @@ export function LiveScreen({
 
   function applyStaged() {
     if (outN + inN === 0 || overCap) return;
+    const next: Record<string, "in" | "out"> = {};
+    for (const id of stagedOut) next[id] = "out";
+    for (const id of stagedIn) next[id] = "in";
+    if (flashTimer.current) window.clearTimeout(flashTimer.current);
+    setFlash(next);
+    flashTimer.current = window.setTimeout(() => setFlash({}), 700);
     onApplyChange(stagedOut, stagedIn);
     clearStaged();
     if (alarm) onDismissAlarm();
@@ -378,6 +382,7 @@ export function LiveScreen({
               }
               pill={null}
               hinted={nextOutIds.has(p.id)}
+              flash={flash[p.id] ?? null}
               onTap={() => toggleOut(p.id)}
               onLong={() => setActionId(p.id)}
             />
@@ -422,6 +427,7 @@ export function LiveScreen({
                   pill={declined ? "sat out" : null}
                   dim={declined}
                   hinted={nextInIds.has(p.id)}
+                  flash={flash[p.id] ?? null}
                   onTap={() => toggleIn(p.id)}
                   onLong={() => setActionId(p.id)}
                 />
@@ -463,19 +469,12 @@ export function LiveScreen({
           </button>
         )}
         {outN + inN > 0 ? (
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={clearStaged}
-              className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
-            >
-              Clear
-            </button>
+          <div className="flex flex-col gap-1.5">
             <button
               type="button"
               onClick={applyStaged}
               disabled={overCap}
-              className="min-h-[52px] flex-1 rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99] disabled:border disabled:border-hairline disabled:bg-canvas disabled:text-faintink"
+              className="min-h-[52px] w-full rounded-[11px] bg-ink text-[15px] font-semibold text-white transition-transform duration-150 ease-out active:scale-[0.96] disabled:border disabled:border-hairline disabled:bg-canvas disabled:text-faintink"
             >
               {overCap ? (
                 "Too many going in — pick who comes off"
@@ -488,6 +487,13 @@ export function LiveScreen({
                   {short ? " — field goes short" : ""}
                 </>
               )}
+            </button>
+            <button
+              type="button"
+              onClick={clearStaged}
+              className="min-h-[44px] w-full text-[13px] font-semibold text-mutedink active:scale-[0.98]"
+            >
+              Clear picks
             </button>
           </div>
         ) : atBreak ? (
