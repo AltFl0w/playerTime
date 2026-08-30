@@ -19,6 +19,7 @@ function blankPlayer(id: PlayerId): PlayerTimeState {
     shifts: 0,
     declines: 0,
     longestStintSec: 0,
+    creditSec: 0,
   };
 }
 
@@ -112,7 +113,13 @@ export function computeState(events: GameEvent[], config: GameConfig, roster: Pl
         break;
       }
       case "SET_AVAILABILITY": {
-        ensure(ev.playerId).availability = ev.available ? "available" : "inactive";
+        const p = ensure(ev.playerId);
+        p.availability = ev.available ? "available" : "inactive";
+        // Credit is a live-board offset only. Never touch playedSec — the
+        // report still shows what actually happened on the field.
+        if (ev.available && ev.creditSec && ev.creditSec > 0) {
+          p.creditSec = (p.creditSec ?? 0) + ev.creditSec;
+        }
         break;
       }
       case "ADJUST_TIME": {

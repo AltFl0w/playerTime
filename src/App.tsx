@@ -2,7 +2,7 @@
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { engine } from "./engine";
-import { SUB_GROUP_TOLERANCE_SEC, type GameEvent, type GameState, type PlayerId } from "./types";
+import type { GameEvent, GameState, PlayerId } from "./types";
 import {
   emptyStore,
   loadStore,
@@ -15,6 +15,8 @@ import { startAlarm, stopAlarm, unlockAudio } from "./lib/alarm";
 import { useWakeLock } from "./lib/wakeLock";
 import { useLiveHistoryTrap } from "./lib/historyTrap";
 import { formatUndone, lastUndoableSlice, undoLastCoachAction } from "./lib/undo";
+import { lateArrivalCredit } from "./lib/lateCredit";
+import { fmtClock } from "./lib/format";
 import { SetupScreen } from "./ui/SetupScreen";
 import { PreGameScreen } from "./ui/PreGameScreen";
 import { LiveScreen, type LiveAlarm } from "./ui/LiveScreen";
@@ -27,22 +29,22 @@ type Screen = "setup" | "pregame" | "live" | "report";
 
 const EMPTY_EVENTS: GameEvent[] = [];
 
-// Greedy left-to-right clustering of due times (each cluster spans at most the
-// tolerance window); returns the start of the largest cluster, earliest wins
-// ties. Null when nobody is on the field.
-function majorityDueSec(dues: number[]): number | null {
-  if (dues.length === 0) return null;
-  const sorted = [...dues].sort((a, b) => a - b);
-  let best: { start: number; size: number } | null = null;
-  let i = 0;
-  while (i < sorted.length) {
-    const start = sorted[i];
-    let j = i;
-    while (j < sorted.length && sorted[j] - start <= SUB_GROUP_TOLERANCE_SEC) j++;
-    if (!best || j - i > best.size) best = { start, size: j - i };
-    i = j;
+// Line-change clock: SUB_IN/OUT from an applied swap, not a leave (OUT+gone).
+function lastAppliedShiftSec(events: GameEvent[]): number {
+  let t = 0;
+  for (let i = 0; i < events.length; i++) {
+    const e = events[i];
+    if (e.type !== "SUB_IN" && e.type !== "SUB_OUT") continue;
+    const n = events[i + 1];
+    const leavePair =
+      e.type === "SUB_OUT" &&
+      n?.type === "SET_AVAILABILITY" &&
+      n.available === false &&
+      n.playerId === e.playerId &&
+      n.atSec === e.atSec;
+    if (!leavePair) t = e.atSec;
   }
-  return best?.start ?? null;
+  return t;
 }
 
 const ROOT_CLASSES =
@@ -81,7 +83,7 @@ export default function App() {
             : 0)
         : 0),
   );
-  const prevForcedRef = useRef(false);
+  const [undoUntilMs, setUndoUntilMs] = useState(0);
   const alarmOpenRef = useRef(!!store.game?.alarm);
 
   function showToast(text: string) {
@@ -89,6 +91,12 @@ export default function App() {
     setToast({ id: Date.now(), text });
     toastTimerRef.current = window.setTimeout(() => setToast(null), 2200);
   }
+
+  useEffect(() => {
+    if (undoUntilMs <= Date.now()) return;
+    const id = window.setTimeout(() => setUndoUntilMs(0), undoUntilMs - Date.now());
+    return () => window.clearTimeout(id);
+  }, [undoUntilMs]);
 
   useEffect(() => {
     saveStore(store);
@@ -205,20 +213,13 @@ export default function App() {
     );
   }, [baseState, clockRunning, events, elapsedSec, store.config, store.roster]);
 
-  // Per-kid sub timing: each kid is due off when HIS stint reaches the
-  // configured interval. Breaks/pauses freeze stints without resetting them
-  // (a kid at 4:00 of a 5:00 interval is due 1:00 into the next quarter).
-  // dueK = elapsed + (interval − stint) is a constant game-time crossing.
+  // One shift clock: NEXT SUB is interval after kickoff or the last applied
+  // line change. Leftover kids do not drag it to 0:00. Pause freezes elapsed
+  // so the number holds instead of going blank.
   const subIntervalSec = Math.max(1, store.config.subIntervalSec);
-  const fieldDueSecs = Object.values(state.players)
-    .filter((p) => p.onField)
-    .map((p) => elapsedSec + subIntervalSec - p.currentStintSec);
-  // The MAJORITY owns the rhythm: cluster dues within the tolerance window and
-  // track the biggest cluster (earliest on ties). Sub 3 of 4 and the counter
-  // follows the three fresh kids — the one who stayed on doesn't drag a
-  // near-full-block alarm to his personal clock; he's simply overdue when the
-  // majority alarm rings and leads its suggestion.
-  const nextSubDueSec = majorityDueSec(fieldDueSecs) ?? Infinity;
+  const shiftStartedAtSec = game?.shiftStartedAtSec ?? 0;
+  const nextSubDueSec = shiftStartedAtSec + subIntervalSec;
+  const nextSubInSec = Math.max(0, nextSubDueSec - elapsedSec);
 
   useEffect(() => {
     if (screen !== "live" || !clockRunning) return;
@@ -291,10 +292,10 @@ export default function App() {
     }
     evts.push({ type: "START", atSec: 0 });
     alarmDoneRef.current = 0;
-    prevForcedRef.current = false;
     stopAlarm();
     setAlarm(null);
     alarmOpenRef.current = false;
+    setUndoUntilMs(0);
     setStore((s) => ({
       ...s,
       game: {
@@ -304,6 +305,7 @@ export default function App() {
         pendingSwaps: [],
         alarmDoneAtSec: 0,
         alarm: null,
+        shiftStartedAtSec: 0,
       },
     }));
     setNow(t);
@@ -340,46 +342,18 @@ export default function App() {
     setScreen("pregame");
   }
 
-  // Alarm orchestration: forced heat cap outranks the interval alarm. Either
-  // way the alarm just beeps and pre-stages a suggestion on the board — the
-  // coach edits by tapping and applies at the whistle.
+  // Beep once when the shift clock hits zero. Mute or apply — it does not
+  // nag, and it does not pre-stage a swap. Heat-cap alarms are gone.
   useEffect(() => {
-    const wasForced = prevForcedRef.current;
-    const forcedNow = !!state.forcedSwap;
-
     if (screen !== "live" || !game || !clockRunning || state.ended) return;
     if (alarmOpenRef.current) return;
-    prevForcedRef.current = forcedNow;
-
-    // The majority block that hasn't been alarmed yet. Kids due EARLIER than
-    // the block (the one who stayed on through a partial sub) don't ring solo
-    // — they're simply overdue when the block alarm arrives and lead its
-    // suggestion. An ignored alarm can't re-ring (dues ≤ alarmDone are out),
-    // but the next block still fires.
-    const unalarmed = fieldDueSecs.filter((d) => d > alarmDoneRef.current);
-    const due = majorityDueSec(unalarmed) ?? Infinity;
-    if (forcedNow && !wasForced) {
-      openAlarm({ kind: "forced", outId: topSuggestOut(), inId: topSuggestIn() });
-    } else if (elapsedSec >= due) {
-      // One alarm per BLOCK: everything due through the block's window is
-      // satisfied by this ring (it IS the suggested group).
-      alarmDoneRef.current = due + SUB_GROUP_TOLERANCE_SEC;
-      patchGame((g) => ({ ...g, alarmDoneAtSec: due + SUB_GROUP_TOLERANCE_SEC }));
-      openAlarm({ kind: "interval", outId: topSuggestOut(), inId: topSuggestIn() });
+    if (elapsedSec >= nextSubDueSec && nextSubDueSec > alarmDoneRef.current) {
+      alarmDoneRef.current = nextSubDueSec;
+      patchGame((g) => ({ ...g, alarmDoneAtSec: nextSubDueSec }));
+      openAlarm({ kind: "interval", outId: null, inId: null });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [state, elapsedSec, screen, game, clockRunning, store.config]);
-
-  // Shield nudges but never blanks the suggestion: with everyone fresh
-  // (early game) fall back to the least-bad pull.
-  function topSuggestOut(): PlayerId | null {
-    const ranked = engine.rankOutCandidates(state, store.config);
-    return ranked.find((c) => c.eligible)?.playerId ?? ranked[0]?.playerId ?? null;
-  }
-
-  function topSuggestIn(): PlayerId | null {
-    return engine.rankInCandidates(state)[0]?.playerId ?? null;
-  }
+  }, [elapsedSec, screen, game, clockRunning, state.ended, nextSubDueSec]);
 
   function openAlarm(a: LiveAlarm) {
     alarmOpenRef.current = true;
@@ -409,6 +383,9 @@ export default function App() {
     ];
     if (evts.length === 0) return;
     pushEvents(evts);
+    patchGame((g) => ({ ...g, shiftStartedAtSec: at }));
+    setUndoUntilMs(Date.now() + 8000);
+    dismissAlarm();
     const n = outIds.length + inIds.length;
     showToast(n === 1 ? "Done" : `Changed ${outIds.length}↔${inIds.length}`);
   }
@@ -465,10 +442,16 @@ export default function App() {
     const trueElapsed = currentElapsedSec();
     patchGame(() => {
       const g = result.game;
-      if (g.runningSinceMs == null) return g;
+      const shiftStartedAtSec = lastAppliedShiftSec(g.events);
+      if (g.runningSinceMs == null) return { ...g, shiftStartedAtSec };
       const replayed = engine.computeState(g.events, store.config, store.roster).elapsedSec;
-      return { ...g, runningSinceMs: Date.now() - Math.max(0, trueElapsed - replayed) * 1000 };
+      return {
+        ...g,
+        shiftStartedAtSec,
+        runningSinceMs: Date.now() - Math.max(0, trueElapsed - replayed) * 1000,
+      };
     });
+    setUndoUntilMs(0);
     showToast(formatUndone(result.undone, (id) => byId.get(id)?.name ?? ""));
   }
 
@@ -509,8 +492,7 @@ export default function App() {
             setAlarm(null);
             alarmOpenRef.current = false;
             alarmDoneRef.current = 0;
-            prevForcedRef.current = false;
-                    setStore(emptyStore());
+            setStore(emptyStore());
             setScreen("setup");
           }}
         />
@@ -550,11 +532,27 @@ export default function App() {
             onDecline={(id) =>
               pushEvents([{ type: "DECLINE", atSec: currentElapsedSec(), playerId: id }])
             }
-            onSetAvailability={(id, available) =>
-              pushEvents([
-                { type: "SET_AVAILABILITY", atSec: currentElapsedSec(), playerId: id, available },
-              ])
-            }
+            onSetAvailability={(id, available) => {
+              const at = currentElapsedSec();
+              if (available) {
+                const credit = lateArrivalCredit(state, id);
+                pushEvents([
+                  {
+                    type: "SET_AVAILABILITY",
+                    atSec: at,
+                    playerId: id,
+                    available: true,
+                    ...(credit > 0 ? { creditSec: credit } : {}),
+                  },
+                ]);
+                if (credit > 0) {
+                  const first = byId.get(id)?.name.split(" ")[0] ?? "Player";
+                  showToast(`${first} in — counted as ${fmtClock(credit)}`);
+                }
+              } else {
+                pushEvents([{ type: "SET_AVAILABILITY", atSec: at, playerId: id, available: false }]);
+              }
+            }}
             onLeaveGame={leaveGame}
             onFixMistake={fixMistake}
             onAdjustTime={(id, deltaSec) =>
@@ -562,10 +560,8 @@ export default function App() {
                 { type: "ADJUST_TIME", atSec: currentElapsedSec(), playerId: id, deltaSec },
               ])
             }
-            nextSubInSec={
-              Number.isFinite(nextSubDueSec) ? Math.max(0, nextSubDueSec - elapsedSec) : subIntervalSec
-            }
-            canUndo={!alarm && lastUndoableSlice(events) !== null}
+            nextSubInSec={nextSubInSec}
+            canUndo={undoUntilMs > Date.now() && lastUndoableSlice(events) !== null}
             onUndo={undoLast}
             sunMode={store.sunMode}
             onSunToggle={toggleSun}

@@ -45,7 +45,7 @@ export type GameEvent =
   | { type: "SUB_OUT"; atSec: number; playerId: PlayerId }
   | { type: "DECLINE"; atSec: number; playerId: PlayerId }
   | { type: "MARK_READY"; atSec: number; playerId: PlayerId }
-  | { type: "SET_AVAILABILITY"; atSec: number; playerId: PlayerId; available: boolean }
+  | { type: "SET_AVAILABILITY"; atSec: number; playerId: PlayerId; available: boolean; creditSec?: number }
   | { type: "ADJUST_TIME"; atSec: number; playerId: PlayerId; deltaSec: number };
 
 export interface PlayerTimeState {
@@ -59,6 +59,10 @@ export interface PlayerTimeState {
   shifts: number;
   declines: number;
   longestStintSec: number;
+  // Late-arrival equity so the live board doesn't treat a kid who showed up
+  // at 12:00 as "0 minutes, always next in." Real playedSec is untouched;
+  // ranking/display add this. Optional so older states stay valid.
+  creditSec?: number;
   // Why: suggestIn's tie-break ("earlier last-stint end wins") needs when the player
   // last came off; not derivable from the other fields. Optional so existing
   // constructors stay valid. Set by computeState on SUB_OUT.

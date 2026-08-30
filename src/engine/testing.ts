@@ -17,11 +17,12 @@ export const ev = {
   subOut: (playerId: string, atSec: number): GameEvent => ({ type: "SUB_OUT", atSec, playerId }),
   decline: (playerId: string, atSec: number): GameEvent => ({ type: "DECLINE", atSec, playerId }),
   ready: (playerId: string, atSec: number): GameEvent => ({ type: "MARK_READY", atSec, playerId }),
-  setAvail: (playerId: string, atSec: number, available: boolean): GameEvent => ({
+  setAvail: (playerId: string, atSec: number, available: boolean, creditSec?: number): GameEvent => ({
     type: "SET_AVAILABILITY",
     atSec,
     playerId,
     available,
+    ...(creditSec && creditSec > 0 ? { creditSec } : {}),
   }),
   adjust: (playerId: string, atSec: number, deltaSec: number): GameEvent => ({
     type: "ADJUST_TIME",

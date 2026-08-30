@@ -1,13 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-import { engine } from "../engine";
-import {
-  SUB_GROUP_TOLERANCE_SEC,
-  type GameConfig,
-  type GameState,
-  type Player,
-  type PlayerTimeState,
-} from "../types";
+import { useRef, useState } from "react";
+import { type GameConfig, type GameState, type Player, type PlayerTimeState } from "../types";
 import { fmtClock } from "../lib/format";
+import { shownSec } from "../lib/lateCredit";
 import { SunToggle } from "./bits";
 import { ConfirmSheet } from "./ConfirmSheet";
 
@@ -47,11 +41,11 @@ interface Props {
 type Row = { p: Player; st: PlayerTimeState };
 
 // Board rules (learned on the sideline, don't regress):
-// - Positions are fixed roster order. Nothing re-sorts or animates while the
-//   game runs; staging changes a chip's border/fill/pill instantly, in place.
 // - Tap = stage (field kid OFF, bench kid IN); tap again = un-stage. One
 //   button applies the whole line change. Long-press holds the rare actions.
-// - The countdown to the end of the quarter owns the header.
+// - Corners mark the suggestion. They are never a selection and never arm
+//   the swap button — the coach taps when they want it.
+// - NEXT SUB is a shift clock from the last applied change. Always a number.
 
 // Long-press without breaking normal taps: fire at 450ms of stillness, then
 // swallow the click that follows pointer-up.
@@ -245,11 +239,13 @@ export function LiveScreen({
     if (st) rows.push({ p, st });
   }
 
-  // Each board leads with who the coach acts on next: field longest-total
-  // first (who's due off), bench least-total first (who goes in) — declined
-  // kids sink below the available ones.
-  const byPlayedDesc = (a: Row, b: Row) => b.st.playedSec - a.st.playedSec;
-  const fieldRows = rows.filter(({ st }) => st.onField).sort(byPlayedDesc);
+  // Each board leads with who the coach acts on next: field most-shown
+  // first (who's due off), bench least-shown first (who goes in) — declined
+  // kids sink below the available ones. shownSec includes late-arrival credit
+  // so a kid who showed up at 12:00 isn't stuck looking like 0:00.
+  const shownOf = (st: PlayerTimeState) => shownSec(st.playedSec, st.creditSec);
+  const byShownDesc = (a: Row, b: Row) => shownOf(b.st) - shownOf(a.st);
+  const fieldRows = rows.filter(({ st }) => st.onField).sort(byShownDesc);
   const benchRows = rows
     .filter(
       ({ st }) =>
@@ -258,53 +254,9 @@ export function LiveScreen({
     .sort(
       (a, b) =>
         Number(a.st.availability === "declined_wait") -
-          Number(b.st.availability === "declined_wait") || a.st.playedSec - b.st.playedSec,
+          Number(b.st.availability === "declined_wait") || shownOf(a.st) - shownOf(b.st),
     );
   const awayRows = rows.filter(({ st }) => !st.onField && st.availability === "inactive");
-
-  const suggestOutId = engine.suggestOut(state, config);
-  const suggestInId = engine.suggestIn(state, config);
-
-  // "longest on" claims a fact, but suggestOut ranks by FAIRNESS (ratio),
-  // which can top a kid who isn't the longest on at all — only show the tag
-  // when his stint really is the unique maximum on the field.
-  const suggestedOut = suggestOutId ? state.players[suggestOutId] : null;
-  const longestOnMeaningful =
-    !!suggestedOut &&
-    rows.every(
-      ({ p, st }) =>
-        !st.onField ||
-        p.id === suggestOutId ||
-        st.currentStintSec < suggestedOut.currentStintSec - 1,
-    );
-
-  // "least played" only earns its ink when the suggested kid is the UNIQUE
-  // minimum — if anyone else on the bench is tied with him (game start, fresh
-  // rotation), the tag is the engine's arbitrary tiebreak, not information.
-  const suggestedIn = suggestInId ? state.players[suggestInId] : null;
-  const leastPlayedMeaningful =
-    !!suggestedIn &&
-    rows.every(
-      ({ p, st }) =>
-        st.onField ||
-        st.availability !== "available" ||
-        p.id === suggestInId ||
-        st.playedSec > suggestedIn.playedSec + 1,
-    );
-
-  // An alarm pre-stages the engine's suggestion — but never stomps a change
-  // the coach already started building.
-  const alarmKey = alarm ? `${alarm.kind}:${alarm.outId}:${alarm.inId}` : null;
-  const stagedEmpty = stagedOut.length === 0 && stagedIn.length === 0;
-  const stagedEmptyRef = useRef(stagedEmpty);
-  stagedEmptyRef.current = stagedEmpty;
-  useEffect(() => {
-    if (!alarmKey || !alarm) return;
-    if (!stagedEmptyRef.current) return;
-    if (alarm.outId && state.players[alarm.outId]?.onField) setStagedOut([alarm.outId]);
-    if (alarm.inId && !state.players[alarm.inId]?.onField) setStagedIn([alarm.inId]);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [alarmKey]);
 
   function toggleOut(id: string) {
     setStagedOut((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
@@ -333,28 +285,14 @@ export function LiveScreen({
   const quarterLenSec = Math.max(1, Math.round(config.gameLengthSec / Math.max(1, config.quarterCount)));
   const intoQuarter = elapsedSec - (quarter - 1) * quarterLenSec;
   const quarterLeft = Math.max(0, quarterLenSec - intoQuarter);
-  // Per-kid sub clock, supplied by App: time until the earliest field kid's
-  // stint reaches the configured interval. Breaks freeze stints, never reset.
   const nextAlarmIn = nextSubInSec;
 
-  // The next swap, previewed: who rides the NEXT BLOCK. A field kid is in the
-  // block if his own due (interval − stint) lands within the tolerance window
-  // of the earliest due, and he'll be past his shield when it rings. A kid
-  // off-rhythm (mid-block replacement) is excluded — he keeps his own
-  // countdown on his card instead. Purely a forecast (corner accent);
-  // staging stays 100% the coach's.
-  const remainOf = (id: string) =>
-    Math.max(0, config.subIntervalSec - (state.players[id]?.currentStintSec ?? 0));
-  const projectedOut = engine.rankOutCandidates(state, config).filter((c) => {
-    const st = state.players[c.playerId];
-    if (!st) return false;
-    const inBlock = remainOf(c.playerId) <= nextAlarmIn + SUB_GROUP_TOLERANCE_SEC;
-    return inBlock && st.currentStintSec + nextAlarmIn >= config.shieldSec;
-  });
-  const nextAvailIn = engine.rankInCandidates(state);
-  const nextSwapN = state.ended ? 0 : Math.min(projectedOut.length, nextAvailIn.length);
-  const nextOutIds = new Set(projectedOut.slice(0, nextSwapN).map((c) => c.playerId));
-  const nextInIds = new Set(nextAvailIn.slice(0, nextSwapN).map((c) => c.playerId));
+  // Suggestion only: empty the bench. N waiting → N corners off (most
+  // minutes, including late credit) and N corners on. Never a selection.
+  const waitingIn = benchRows.filter(({ st }) => st.availability === "available");
+  const nextSwapN = state.ended ? 0 : Math.min(fieldRows.length, waitingIn.length);
+  const nextOutIds = new Set(fieldRows.slice(0, nextSwapN).map(({ p }) => p.id));
+  const nextInIds = new Set(waitingIn.slice(0, nextSwapN).map(({ p }) => p.id));
 
   const actionRow = actionId ? rows.find((r) => r.p.id === actionId) ?? null : null;
   const fixRow = fixFor ? rows.find((r) => r.p.id === fixFor) ?? null : null;
@@ -369,8 +307,12 @@ export function LiveScreen({
           <span className="text-[11px] font-semibold tracking-[0.05em] text-faintink">
             NEXT SUB
           </span>
-          <span className="text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums text-ink">
-            {clockRunning ? fmtClock(nextAlarmIn) : "—"}
+          <span
+            className={`text-[44px] font-bold leading-none tracking-[-0.045em] tabular-nums ${
+              clockRunning ? "text-ink" : "text-neutral-400"
+            }`}
+          >
+            {fmtClock(nextAlarmIn)}
           </span>
         </div>
         <div className="flex items-center gap-2.5">
@@ -430,19 +372,11 @@ export function LiveScreen({
                 <>
                   {fmtClock(st.currentStintSec)}{" "}
                   <span className="text-[10.5px] tracking-[0.02em] text-faintink">on</span> ·{" "}
-                  {fmtClock(st.playedSec)}{" "}
+                  {fmtClock(shownOf(st))}{" "}
                   <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
                 </>
               }
-              pill={
-                p.id === suggestOutId && longestOnMeaningful
-                  ? "longest on"
-                  : // Off-rhythm kid: not part of the next block, so his card
-                    // carries his own countdown — no guessing when he's due.
-                    !nextOutIds.has(p.id) && remainOf(p.id) > nextAlarmIn + SUB_GROUP_TOLERANCE_SEC
-                    ? `off in ${fmtClock(remainOf(p.id))}`
-                    : null
-              }
+              pill={null}
               hinted={nextOutIds.has(p.id)}
               onTap={() => toggleOut(p.id)}
               onLong={() => setActionId(p.id)}
@@ -481,17 +415,11 @@ export function LiveScreen({
                   stagedLabel="IN"
                   time={
                     <>
-                      {fmtClock(st.playedSec)}{" "}
+                      {fmtClock(shownOf(st))}{" "}
                       <span className="text-[10.5px] tracking-[0.02em] text-faintink">total</span>
                     </>
                   }
-                  pill={
-                    declined
-                      ? "sat out"
-                      : p.id === suggestInId && leastPlayedMeaningful
-                        ? "least"
-                        : null
-                  }
+                  pill={declined ? "sat out" : null}
                   dim={declined}
                   hinted={nextInIds.has(p.id)}
                   onTap={() => toggleIn(p.id)}
@@ -522,28 +450,35 @@ export function LiveScreen({
         </div>
       )}
 
-      {/* The dock is the one shape-shifter: whatever the moment's commit is,
-          it's this bar — alarm > staged change > quarter start > pause. */}
+      {/* Dock: staged change > quarter start > pause. Alarm is a mute strip
+          above the buttons — it never hijacks them or preloads a swap. */}
       <div className="sticky bottom-0 -mx-4 border-t border-hairline bg-canvas px-4 pb-[max(1rem,env(safe-area-inset-bottom))] pt-3">
-        {alarm || outN + inN > 0 ? (
+        {alarm && (
+          <button
+            type="button"
+            onClick={onDismissAlarm}
+            className="pt-banner mb-2 flex min-h-[44px] w-full items-center justify-center rounded-[11px] bg-ink text-[14px] font-semibold text-white active:scale-[0.99]"
+          >
+            Sub window · tap to mute
+          </button>
+        )}
+        {outN + inN > 0 ? (
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={alarm ? onDismissAlarm : clearStaged}
+              onClick={clearStaged}
               className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
             >
-              {alarm ? "Quiet" : "Clear"}
+              Clear
             </button>
             <button
               type="button"
               onClick={applyStaged}
-              disabled={overCap || outN + inN === 0}
+              disabled={overCap}
               className="min-h-[52px] flex-1 rounded-[11px] bg-ink text-[15px] font-semibold text-white active:scale-[0.99] disabled:border disabled:border-hairline disabled:bg-canvas disabled:text-faintink"
             >
               {overCap ? (
                 "Too many going in — pick who comes off"
-              ) : outN + inN === 0 ? (
-                "Tap kids to set up the change"
               ) : (
                 <>
                   Make the change{" "}
@@ -572,15 +507,6 @@ export function LiveScreen({
                 className="min-h-[52px] shrink-0 rounded-[11px] border border-hairline2 bg-card px-[18px] text-[14px] font-medium text-mutedink active:scale-[0.98]"
               >
                 Undo
-              </button>
-            )}
-            {nextSwapN > 0 && (
-              <button
-                type="button"
-                onClick={() => onApplyChange([...nextOutIds], [...nextInIds])}
-                className="min-h-[52px] flex-1 rounded-[11px] border border-stagedin-line bg-stagedin-soft text-[15px] font-semibold text-stagedin active:scale-[0.99]"
-              >
-                Swap <span className="tabular-nums">{nextSwapN}⇄{nextSwapN}</span>
               </button>
             )}
             <button
@@ -721,7 +647,7 @@ export function LiveScreen({
                   played total
                 </div>
                 <div className="text-[24px] font-extrabold leading-tight tabular-nums">
-                  {fmtClock(actionRow.st.playedSec)}
+                  {fmtClock(shownOf(actionRow.st))}
                 </div>
                 <div className="mt-2 flex gap-1.5">
                   <button

@@ -22,6 +22,10 @@ export interface GameRecord {
   // store can't import from ui.)
   alarmDoneAtSec?: number;
   alarm?: { kind: "interval" | "forced"; outId: string | null; inId: string | null } | null;
+  // Game-sec the current 5-minute shift began (kickoff or last applied line
+  // change). NEXT SUB = this + interval. Not derived from leftover stints —
+  // that made the timer 0:00 the moment a partial swap landed.
+  shiftStartedAtSec?: number;
 }
 
 export interface Store {
