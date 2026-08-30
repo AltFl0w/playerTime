@@ -95,7 +95,7 @@ function Chip({
   time: React.ReactNode;
   pill: string | null;
   dim?: boolean;
-  /** Soft forecast of the next swap: dashed outline only, never a selection. */
+  /** Next-swap forecast: colored corner only, never a selection. */
   hinted?: boolean;
   flash?: "in" | "out" | null;
   onTap: () => void;
@@ -104,10 +104,7 @@ function Chip({
 }) {
   const lp = useLongPress(onLong);
   const isOff = stagedLabel === "OFF";
-  const stagedCls = isOff
-    ? "border-stagedout bg-stagedout-soft"
-    : "border-stagedin bg-stagedin-soft";
-  const hintCls = isOff ? "border-stagedout" : "border-stagedin";
+  const colorCls = isOff ? "border-stagedout" : "border-stagedin";
   const nameCls = staged ? (isOff ? "text-stagedout" : "text-stagedin") : "text-ink";
   const flashCls = flash === "in" ? "pt-just-in" : flash === "out" ? "pt-just-out" : "";
   return (
@@ -115,20 +112,16 @@ function Chip({
       type="button"
       {...lp}
       onClick={onTap}
-      className={`relative flex flex-col items-start gap-[3px] rounded-xl border-2 px-[13px] pb-[11px] pt-[13px] text-left transition-[border-color,background-color,color,transform] duration-150 ease-out active:scale-[0.96] ${
+      className={`relative flex flex-col items-start gap-[3px] rounded-xl border-2 bg-card px-[13px] pb-[11px] pt-[13px] text-left transition-[border-color,color,transform] duration-150 ease-out active:scale-[0.96] ${
         big ? "min-h-[98px]" : "min-h-[92px]"
       } ${
-        staged
-          ? stagedCls
-          : hinted
-            ? `border-dashed bg-card ${hintCls}`
-            : "border-hairline2 bg-card shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
+        staged ? colorCls : "border-hairline2 shadow-[0_1px_2px_rgba(0,0,0,0.04)]"
       } ${dim ? "opacity-55" : ""} ${flashCls}`}
     >
       {hinted && !staged && (
         <span
           aria-hidden="true"
-          className={`pointer-events-none absolute -left-[2px] -top-[2px] h-8 w-8 rounded-tl-xl border-l-[4px] border-t-[4px] ${hintCls}`}
+          className={`pointer-events-none absolute -left-[2px] -top-[2px] h-8 w-8 rounded-tl-xl border-l-[4px] border-t-[4px] ${colorCls}`}
         />
       )}
       <div className="flex w-full items-start justify-between gap-1">
@@ -159,9 +152,7 @@ function Chip({
           )
         )}
       </div>
-      <span className={`mt-auto text-[12.5px] tabular-nums ${staged ? nameCls : "text-mutedink"}`}>
-        {time}
-      </span>
+      <span className="mt-auto text-[12.5px] tabular-nums text-mutedink">{time}</span>
     </button>
   );
 }
